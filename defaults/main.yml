@@ -1,0 +1,8 @@
+---
+# provider auth information
+cloud_provider: "gcp"
+cloud_provider_auth: {}
+
+# resource type creation
+cloud_provider_resource_type: "vm" 
+cloud_provider_resource_detail: {}

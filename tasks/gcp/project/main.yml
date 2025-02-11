@@ -1,0 +1,11 @@
+---
+- name: Create a GCP Project
+  google.cloud.gcp_resourcemanager_project:
+    id: "{{ cloud_provider_resource_detail.id }}"
+    name: "{{ cloud_provider_resource_detail.name }}"
+    auth_kind: "{{ cloud_provider_resource_detail.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    parent:
+      type: organization
+      id: "{{ cloud_provider_resource_detail.parent_id }}"
+    state: present

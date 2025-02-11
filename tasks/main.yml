@@ -1,0 +1,3 @@
+---
+  - name: Include creation type
+    ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ cloud_provider_resource_type }}/main.yml"
