@@ -1,0 +1,77 @@
+---
+- name: Create a Disk
+  google.cloud.gcp_compute_disk:
+    name: "{{ cloud_provider_resource_detail.disk_name }}"
+    size_gb: "{{ cloud_provider_resource_detail.size_gb }}"
+    source_image: "{{ cloud_provider_resource_detail.source_image }}"
+    zone: "{{ cloud_provider_resource_detail.zone }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: disk
+
+- name: Create a Network
+  google.cloud.gcp_compute_network:
+    name: "{{ cloud_provider_resource_detail.network_name }}"
+    auto_create_subnetworks: "{{ cloud_provider_resource_detail.auto_create_subnetworks }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: network
+
+- name: Create a Subnetwork
+  google.cloud.gcp_compute_subnetwork:
+    name: "{{ cloud_provider_resource_detail.subnetwork_name }}"
+    region: "{{ cloud_provider_resource_detail.region }}"
+    network: "{{ network }}"
+    ip_cidr_range: "{{ cloud_provider_resource_detail.ip_cidr_range }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: subnet
+
+- name: Create a NAT Address
+  google.cloud.gcp_compute_address:
+    name: "{{ cloud_provider_resource_detail.address_name }}"
+    region: "{{ cloud_provider_resource_detail.region }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: address
+  # when: cloud_provider_resource_detail.create_address
+
+- name: Create a Instance (GCE)
+  google.cloud.gcp_compute_instance:
+    name: "{{ cloud_provider_resource_detail.vm_name }}"
+    machine_type: "{{ cloud_provider_resource_detail.machine_type }}"
+    disks:
+    - auto_delete: true
+      boot: 'true'
+      source: "{{ disk }}"
+    - auto_delete: true
+      interface: NVME
+      type: SCRATCH
+      initialize_params:
+        disk_type: local-ssd
+    # TODO: Add meta for complete cloud integration
+    # metadata:
+    #   startup-script-url: gs:://graphite-playground/bootstrap.sh
+    #   cost-center: '12345'
+    labels:
+      environment: "{{ cloud_provider_resource_detail.environment }}"
+    network_interfaces:
+    - network: "{{ network }}"
+      subnetwork: "{{ subnet }}"
+      access_configs:
+      - name: External NAT
+        nat_ip: "{{ address }}"
+        type: ONE_TO_ONE_NAT
+    zone: "{{ cloud_provider_resource_detail.zone }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
