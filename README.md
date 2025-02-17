@@ -32,38 +32,52 @@ List of variables in ansible-role-cloud-provider:
 
 ```sh
 ---
-cloud_provider: "gcp"
-cloud_provider_auth: {} # depends on cloud providers
+cloud_provider: "gcp" # gcp | aws | proxmox
+cloud_provider_auth: {} # depends to cloud provider
 cloud_provider_resource_type: "vm" # resource type creation
+cloud_provider_resource_detail: {} # dictionary resource attribute detail
 ```
 
 Example Playbook
 ----------------
 
 ```sh
-- hosts: servers
+---
+
+- name: Create Compute Engine
+  hosts: localhost
+  gather_facts: false
+  
   vars:
+    cloud_provider: "gcp"
+    cloud_provider_resource_type: "vm"
     cloud_provider_auth:
-      project_name: my_name
-      service_account_email: example@devetek.com
-      service_acount_token: "****************"
-    cloud_provider_resource_type: vm
+      project_id: "terpusat"
+      auth_kind: "serviceaccount"
+      service_acount_token: "/home/devetek/creator/credentials/gcp/sa-development.json"
     cloud_provider_resource_detail:
-      id: my-vm-id
-      name: my-vm
-      auth_kind: serviceaccount
-      parent_id: '12345'
-      region: asia-southeast1
-      zone: asia-southeast1-a
+      # network parameters
+      network_name: "network-dpanel-example"
+      auto_create_subnetworks: false
+      # subnetwork parameters
+      subnetwork_name: "subnetwork-dpanel-example"
+      region: "asia-southeast2"
       ip_cidr_range: 172.16.0.0/16
-      auto_create_subnetworks: true
-      initial_node_count: 2
-      node_config:
-        machine_type: n1-standard-4
-        disk_size_gb: 500
+      # disk parameters
+      disk_name: "disk-dpanel-example"
+      source_image: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+      zone: "asia-southeast2-a"
+      size_gb: 40
+      # external IP (NAT) parameters
+      address_name: "address-dpanel-example"
+      # compute engine parameters
+      vm_name: "vm-dpanel-example"
+      machine_type: "n1-standard-1"
+      environment: "development"
+
 
   roles:
-    - devetek.cloud-provider
+    - role: dpanel.cloud-provider
 ```
 
 License
