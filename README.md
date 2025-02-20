@@ -97,3 +97,4 @@ Author Information
 [alicloud]: https://github.com/alibaba/alibaba.alicloud
 [amazon.aws]: https://github.com/ansible-collections/amazon.aws
 [google.cloud]: https://github.com/ansible-collections/google.cloud
+[microsoft.azure]: https://github.com/ansible-collections/azure
