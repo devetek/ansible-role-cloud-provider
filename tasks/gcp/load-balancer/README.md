@@ -1,1 +1,0 @@
-https://docs.ansible.com/ansible/latest/collections/google/cloud/gcp_compute_global_forwarding_rule_module.html

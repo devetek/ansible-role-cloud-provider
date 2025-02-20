@@ -94,3 +94,6 @@ Author Information
 [Nedya Prakasa]: https://github.com/prakasa1904
 [mit]: https://opensource.org/licenses/MIT
 [devetek]: https://github.com/devetek
+[alicloud]: https://github.com/alibaba/alibaba.alicloud
+[amazon.aws]: https://github.com/ansible-collections/amazon.aws
+[google.cloud]: https://github.com/ansible-collections/google.cloud
