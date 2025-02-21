@@ -5,10 +5,11 @@
     initial_node_count: "{{ cloud_provider_resource_detail.initial_node_count }}"
     node_config: "{{ cloud_provider_resource_detail.node_config }}"
     location: "{{ cloud_provider_resource_detail.location }}"
+    network: "{{ cloud_provider_resource_detail.network | default('') }}"
     subnetwork: "{{ cloud_provider_resource_detail.subnetwork | default('') }}"
     initial_cluster_version: "{{ cloud_provider_resource_detail.initial_cluster_version }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: present
+    state: "{{ cloud_provider_resource_detail.state | default('present') }}"
   register: cluster
