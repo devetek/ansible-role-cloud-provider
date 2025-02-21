@@ -1,13 +1,3 @@
 ---
-- name: create a Kubernetes Cluster
-  google.cloud.gcp_container_cluster:
-    name: "{{ cloud_provider_resource_detail.name }}"
-    initial_node_count: "{{ cloud_provider_resource_detail.initial_node_count }}"
-    node_config:
-      machine_type: "{{ cloud_provider_resource_detail.node_config.machine_type }}"
-      disk_size_gb: "{{ cloud_provider_resource_detail.node_config.disk_size_gb }}"
-    location: "{{ cloud_provider_resource_detail.zone }}"
-    project: "{{ cloud_provider_auth.project_name }}"
-    auth_kind: "{{ cloud_provider_resource_detail.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: present
+  - name: Include Kubernetes Resource Type
+    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.kube_init }}.yml"
