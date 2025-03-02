@@ -98,3 +98,5 @@ Author Information
 [amazon.aws]: https://github.com/ansible-collections/amazon.aws
 [google.cloud]: https://github.com/ansible-collections/google.cloud
 [microsoft.azure]: https://github.com/ansible-collections/azure
+[hetzner.hcloud]: https://github.com/ansible-collections/hetzner.hcloud
+[community.digitalocean]: https://github.com/ansible-collections/community.digitalocean
