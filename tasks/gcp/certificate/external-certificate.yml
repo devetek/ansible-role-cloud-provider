@@ -1,10 +1,10 @@
 ---  
 - name: Create a External SSL Certificate
   google.cloud.gcp_compute_ssl_certificate:
-    name: "{{ cloud_provider_resource_detail.cert_name }}"
-    description: "{{ cloud_provider_resource_detail.cert_description }}"
-    certificate: "{{ cloud_provider_resource_detail.cert_pem | default('') }}"
-    private_key: "{{ cloud_provider_resource_detail.cert_private | default('') }}"
+    name: "{{ cloud_provider_resource_detail.certificate_name }}"
+    description: "{{ cloud_provider_resource_detail.certificate_description }}"
+    certificate: "{{ cloud_provider_resource_detail.certificate_pem | default('') }}"
+    private_key: "{{ cloud_provider_resource_detail.certificate_private | default('') }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
