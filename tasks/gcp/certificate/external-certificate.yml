@@ -1,5 +1,5 @@
 ---  
-- name: Create a External SSL Certificate
+- name: Manage a External SSL Certificate
   google.cloud.gcp_compute_ssl_certificate:
     name: "{{ cloud_provider_resource_detail.certificate_name }}"
     description: "{{ cloud_provider_resource_detail.certificate_description }}"
