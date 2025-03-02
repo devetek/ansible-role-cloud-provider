@@ -1,3 +1,43 @@
 ---
-  - name: Include Load Balancer Type
-    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.lb_type }}.yml"
+- name: Get Info on a Global Address
+  gcp_compute_global_address_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.global_address_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: globaladdress
+
+
+- name: Get Info on a Target HTTP Proxy
+  google.cloud.gcp_compute_target_http_proxy_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.url_map_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  when: (cloud_provider_resource_detail.lb_https_enable is defined and cloud_provider_resource_detail.lb_https_enable == false) or cloud_provider_resource_detail.lb_https_enable is not defined
+  register: target_proxy
+
+- name: Get Info on a Target HTTPS Proxy
+  gcp_compute_target_https_proxy_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.url_map_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  when: cloud_provider_resource_detail.lb_https_enable is defined and cloud_provider_resource_detail.lb_https_enable == true
+  register: target_proxy
+
+- name: Create a Global Forwarding Rule
+  google.cloud.gcp_compute_global_forwarding_rule:
+    name: "{{ cloud_provider_resource_detail.lb_name }}"
+    ip_address: "{{ globaladdress.resources[0].address }}"
+    ip_protocol: "{{ cloud_provider_resource_detail.lb_ip_protocol | default('') }}"
+    load_balancing_scheme: "{{ cloud_provider_resource_detail.lb_load_balancing_scheme | default('EXTERNAL') }}"
+    port_range: "{{ cloud_provider_resource_detail.lb_port }}"
+    target: "{{ target_proxy.resources[0].selfLink }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "{{ cloud_provider_resource_detail.state | default('present') }}"

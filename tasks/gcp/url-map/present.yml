@@ -1,0 +1,52 @@
+---
+- name: Get Info on a SSL Certificate
+  gcp_compute_ssl_certificate_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.certificate_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: ssl_cert
+
+
+- name: Get Info on a SSL Certificate Event
+  gcp_compute_ssl_certificate_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.certificate_name_event }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: ssl_cert_event
+  
+- name: Get Info on a Backend Bucket
+  google.cloud.gcp_compute_backend_bucket_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.backend_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: defaultservice
+
+- name: Create a URL Map
+  google.cloud.gcp_compute_url_map:
+    name: "{{ cloud_provider_resource_detail.url_map_name }}"
+    default_service: "{{ defaultservice.resources[0] }}"
+    host_rules: "{{ cloud_provider_resource_detail.host_rules | default(omit) }}"
+    path_matchers: "{{ cloud_provider_resource_detail.path_matchers | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: urlmap
+
+- name: Create a Target HTTPS Proxy
+  google.cloud.gcp_compute_target_https_proxy:
+    name: "{{ cloud_provider_resource_detail.target_https_proxy_name }}"
+    ssl_certificates:
+    - "{{ ssl_cert.resources[0] }}"
+    - "{{ ssl_cert_event.resources[0] }}"
+    url_map: "{{ urlmap }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
