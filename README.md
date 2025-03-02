@@ -16,14 +16,22 @@ Idempotent: Ensures that applying the role multiple times doesn’t result in un
 This role integrates seamlessly into CI/CD pipelines, enabling automated infrastructure management, efficient resource scaling, and consistent environment setup, improving operational efficiency and reducing manual errors.
 
 
-Requirements
+Prerequisites
 ------------
 
-This role requires the google.cloud Ansible collection to interact with Google Cloud services. Install the collection using the following command:
+This role requires the `google.cloud` Ansible collection to interact with Google Cloud services. Unfortunately, the official `google.cloud` collection has not been updated to support the latest Google Cloud Platform API (this may be because the maintainers are focusing more on the Terraform implementation). Therefore, it is necessary to route the target dependency from a custom Git URL. Install the collection using the following steps:
 
+1. Create `requirements.yml` in your ansible project
+
+2. Replace `google.cloud` source from 
 ```sh
-ansible-galaxy collection install google.cloud
+collections:
+  - name: https://github.com/prakasa1904/google.cloud.git
+    type: git
+    version: master
 ```
+
+3. Install dependencies by execute command: `ansible-galaxy install -r requirements.yml`
 
 Role Variables
 --------------
@@ -44,40 +52,37 @@ Example Playbook
 ```sh
 ---
 
-- name: Create Compute Engine
+- name: Create Bucket (GCS) and Backend Bucket
   hosts: localhost
   gather_facts: false
   
   vars:
     cloud_provider: "gcp"
-    cloud_provider_resource_type: "vm"
+    cloud_provider_resource_type: "bucket"
     cloud_provider_auth:
       project_id: "terpusat"
       auth_kind: "serviceaccount"
-      service_acount_token: "/home/devetek/creator/credentials/gcp/sa-development.json"
+      service_acount_token: "../credential.json"
     cloud_provider_resource_detail:
-      # network parameters
-      network_name: "network-dpanel-example"
-      auto_create_subnetworks: false
-      # subnetwork parameters
-      subnetwork_name: "subnetwork-dpanel-example"
-      region: "asia-southeast2"
-      ip_cidr_range: 172.16.0.0/16
-      # disk parameters
-      disk_name: "disk-dpanel-example"
-      source_image: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
-      zone: "asia-southeast2-a"
-      size_gb: 40
-      # external IP (NAT) parameters
-      address_name: "address-dpanel-example"
-      # compute engine parameters
-      vm_name: "vm-dpanel-example"
-      machine_type: "n1-standard-1"
-      environment: "development"
-
+      bucket_name: "bucket-dpanel-example"
+      storage_class: "STANDARD"
+      location: "asia-southeast2"
+      predefined_default_object_acl: "publicRead"
+      cors:
+        - max_age_seconds: 86400
+          method: "*"
+          origin: "*"
+      acl:
+        entity: "allUsers"
+        role: "READER"
+      backend_bucket:
+        name: "be-bucket"
+        description: "A BackendBucket to connect LNB w/ Storage Bucket"
+        enable_cdn: 'true'
 
   roles:
     - role: dpanel.cloud-provider
+
 ```
 
 License
