@@ -19,19 +19,33 @@ This role integrates seamlessly into CI/CD pipelines, enabling automated infrast
 Prerequisites
 ------------
 
-This role requires the `google.cloud` Ansible collection to interact with Google Cloud services. Unfortunately, the official `google.cloud` collection has not been updated to support the latest Google Cloud Platform API (this may be because the maintainers are focusing more on the Terraform implementation). Therefore, it is necessary to route the target dependency from a custom Git URL. Install the collection using the following steps:
+This role requires the `google.cloud` Ansible collection to interact with Google Cloud services. Unfortunately, the official `google.cloud` collection has not been updated to support the latest Google Cloud Platform API. Therefore, it is necessary to route the target dependency from a custom Git URL. Install the collection using the following steps:
 
-1. Create `requirements.yml` in your ansible project
+### 1. Install `google.cloud` with CLI or file `requirements.yml`
 
-2. Replace `google.cloud` source from 
+- CLI:
+```sh
+ansible-galaxy collection install git+https://github.com/prakasa1904/google.cloud.git,master
+```
+
+- requirements.yml:
 ```sh
 collections:
   - name: https://github.com/prakasa1904/google.cloud.git
     type: git
     version: master
 ```
+Execute command: `ansible-galaxy install -r requirements.yml`
 
-3. Install dependencies by execute command: `ansible-galaxy install -r requirements.yml`
+### 2. Verify Installation
+
+After installation, you can verify that the collection is correctly installed by running:
+
+```sh
+ansible-galaxy collection list google.cloud
+```
+
+This command will display the installed version and confirm that it's sourced from the custom repository.
 
 Role Variables
 --------------
