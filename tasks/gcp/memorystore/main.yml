@@ -1,0 +1,30 @@
+---
+- name: Get Info on a Network
+  gcp_compute_network_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.compute_network_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: network
+
+- name: Create a Redis Instance
+  google.cloud.gcp_redis_instance:
+    name: "{{ cloud_provider_resource_detail.redis_instance_name }}"
+    tier: "{{ cloud_provider_resource_detail.redis_version | default('STANDARD_HA') }}"
+    memory_size_gb: "{{ cloud_provider_resource_detail.memory_size_gb }}"
+    region: "{{ cloud_provider_resource_detail.region }}"
+    location_id: "{{ cloud_provider_resource_detail.location_id }}"
+    redis_version: "{{ cloud_provider_resource_detail.redis_version | default('REDIS_3_2') }}"
+    display_name: "{{ cloud_provider_resource_detail.display_name }}"
+    authorized_network: "{{ network.resources[0] }}"
+    connect_mode: "{{ cloud_provider_resource_detail.connect_mode }}"
+    alternative_location_id: "{{ cloud_provider_resource_detail.alternative_location_id | default(omit) }}"
+    reserved_ip_range: "{{ cloud_provider_resource_detail.reserved_ip_range | default(omit) }}"
+    labels: "{{ cloud_provider_resource_detail.labels | default(omit) }}"
+    redis_configs: "{{ cloud_provider_resource_detail.redis_configs | default(omit) }}"
+    auth_enabled: "{{ cloud_provider_resource_detail.auth_enabled | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "{{ cloud_provider_resource_detail.state | default('present') }}"
