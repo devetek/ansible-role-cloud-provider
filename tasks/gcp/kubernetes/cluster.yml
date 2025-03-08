@@ -1,5 +1,5 @@
 ---
-- name: Create a Kubernetes Cluster
+- name: Manage a Kubernetes Cluster
   google.cloud.gcp_container_cluster:
     name: "{{ cloud_provider_resource_detail.kube_cluster_name }}"
     initial_node_count: "{{ cloud_provider_resource_detail.initial_node_count }}"

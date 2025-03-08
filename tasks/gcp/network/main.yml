@@ -1,21 +1,3 @@
 ---
-- name: Create a Network
-  google.cloud.gcp_compute_network:
-    name: "{{ cloud_provider_resource_detail.network_name }}"
-    auto_create_subnetworks: "{{ cloud_provider_resource_detail.auto_create_subnetworks }}"
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: present
-  register: network
-
-- name: Create a Subnetwork
-  google.cloud.gcp_compute_subnetwork:
-    name: "{{ cloud_provider_resource_detail.subnetwork_name }}"
-    region: "{{ cloud_provider_resource_detail.region }}"
-    network: "{{ network }}"
-    ip_cidr_range: "{{ cloud_provider_resource_detail.ip_cidr_range }}"
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: present
+  - name: Manage Network and Subnetwork
+    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.state | default('present') }}.yml"

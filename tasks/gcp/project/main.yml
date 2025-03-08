@@ -8,4 +8,4 @@
     parent:
       type: organization
       id: "{{ cloud_provider_resource_detail.parent_id }}"
-    state: present
+    state: "{{ cloud_provider_resource_detail.state | default('present') }}"
