@@ -1,0 +1,10 @@
+---
+
+- name: Get Info on a Backend Bucket as Default Backend
+  google.cloud.gcp_compute_backend_bucket_info:
+    filters:
+    - name = {{ cloud_provider_resource_detail.backend_name }}
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: default_service

@@ -1,6 +1,6 @@
 ---
 - name: Get Info on a Global Address
-  gcp_compute_global_address_info:
+  google.cloud.gcp_compute_global_address_info:
     filters:
     - name = {{ cloud_provider_resource_detail.global_address_name }}
     project: "{{ cloud_provider_auth.project_id }}"
@@ -20,7 +20,7 @@
   register: target_proxy
 
 - name: Get Info on a Target HTTPS Proxy
-  gcp_compute_target_https_proxy_info:
+  google.cloud.gcp_compute_target_https_proxy_info:
     filters:
     - name = {{ cloud_provider_resource_detail.url_map_name }}
     project: "{{ cloud_provider_auth.project_id }}"
