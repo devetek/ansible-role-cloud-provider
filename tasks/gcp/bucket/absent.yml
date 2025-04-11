@@ -1,19 +1,4 @@
 ---
-
-# - block:
-#   - name: Delete a Backend Bucket if exist
-#     google.cloud.gcp_compute_backend_bucket:
-#       name: "{{ cloud_provider_resource_detail.backend_bucket.name }}"
-#       bucket_name: "{{ cloud_provider_resource_detail.bucket_name }}"
-#       description: "{{ cloud_provider_resource_detail.backend_bucket.description }}"
-#       enable_cdn: "{{ cloud_provider_resource_detail.backend_bucket.enable_cdn | default('true') }}"
-#       project: "{{ cloud_provider_auth.project_id }}"
-#       auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-#       service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-#       state: absent
-#   when: cloud_provider_resource_detail.backend_bucket is defined
-
-
 - name: Delete a Bucket
   google.cloud.gcp_storage_bucket:
     name: "{{ cloud_provider_resource_detail.bucket.name }}"
