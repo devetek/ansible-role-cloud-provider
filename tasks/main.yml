@@ -1,3 +1,10 @@
 ---
-  - name: Include resource Creation Type
-    ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ cloud_provider_resource_type }}/main.yml"
+- name: GCP Resource Creation
+  ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/main.yml"
+  loop: "{{ cloud_provider_resource_type }}"
+  when: state is defined and state == "present"
+
+- name: GCP Resource Deletion
+  ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/main.yml"
+  loop: "{{ cloud_provider_resource_type | reverse }}"
+  when: state is defined and state == "absent"
