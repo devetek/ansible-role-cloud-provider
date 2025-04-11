@@ -18,3 +18,5 @@
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: "absent"
+  with_items: "{{ cloud_provider_resource_detail.subnetworks }}"
+  when: network.resources | length > 0
