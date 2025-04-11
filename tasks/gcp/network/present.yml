@@ -1,14 +1,9 @@
 ---
 - name: Create a Network
   google.cloud.gcp_compute_network:
-    name: "{{ cloud_provider_resource_detail.network_name }}"
-    auto_create_subnetworks: "{{ cloud_provider_resource_detail.auto_create_subnetworks }}"
+    name: "{{ cloud_provider_resource_detail.network.name }}"
+    auto_create_subnetworks: "{{ cloud_provider_resource_detail.network.auto_create_subnetworks }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: "present"
-
-- name: Create a Subnetwork
-  ansible.builtin.include_tasks: present-subnetwork.yml
-  when: cloud_provider_resource_detail.subnetworks is not undefined and cloud_provider_resource_detail.subnetworks|length > 0
-  with_items: "{{ cloud_provider_resource_detail.subnetworks }}"

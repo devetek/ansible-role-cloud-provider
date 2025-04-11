@@ -1,0 +1,3 @@
+---
+  - name: Include GCP Subnetwok Management
+    ansible.builtin.include_tasks: "{{ state | default('present') }}.yml"
