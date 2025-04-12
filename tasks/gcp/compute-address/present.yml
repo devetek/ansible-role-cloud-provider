@@ -1,0 +1,21 @@
+---
+
+- name: Create a External Address (NAT)
+  google.cloud.gcp_compute_address:
+    name: "{{ cloud_provider_resource_detail.compute_address.name }}"
+    description: "{{ cloud_provider_resource_detail.compute_address.description | default(omit) }}"
+    address_type: "{{ cloud_provider_resource_detail.compute_address.address_type | default(omit) }}"
+    address: "{{ cloud_provider_resource_detail.compute_address.address | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.compute_address.env_type | default(omit) }}"
+    status: "{{ cloud_provider_resource_detail.compute_address.status | default(omit) }}"
+    region: "{{ cloud_provider_resource_detail.compute_address.region | default(omit) }}"
+    purpose: "{{ cloud_provider_resource_detail.compute_address.purpose | default(omit) }}"
+    network: "{{ cloud_provider_resource_detail.compute_address.network | default(omit) }}"
+    subnetwork: "{{ cloud_provider_resource_detail.compute_address.subnetwork | default(omit) }}"
+    network_tier: "{{ cloud_provider_resource_detail.compute_address.network_tier | default(omit) }}"
+    prefix_length: "{{ cloud_provider_resource_detail.compute_address.prefix_length | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.compute_address.scopes | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "{{ state | default('present') }}"
