@@ -1,3 +1,3 @@
 ---
-  - name: Include Certificate Type
-    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.certificate_type }}-certificate.yml"
+  - name: Include GCP Certificate Management
+    ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/{{ state | default('present') }}.yml"
