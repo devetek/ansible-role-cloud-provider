@@ -1,5 +1,5 @@
 ---
-- name: Init Backend Bucket Output
+- name: Init URL Map Output
   ansible.builtin.set_fact:
     output_url_map: null
   when: with_output is defined and with_output and output_url_map is not defined
@@ -23,13 +23,7 @@
   register: url_map_result
 
 # set_fact to print output globally
-- name: Set Backend Bucket Output
+- name: Set URL Map Output
   set_fact:
     output_url_map: "{{ output_url_map | combine({ cloud_provider_resource_detail.url_map.name : url_map_result }, recursive=True) }}"
-  when: with_output is defined and with_output
-
-# Print variable output_url_map
-- name: Print output_url_map
-  ansible.builtin.debug:
-    msg: "{{ output_url_map }}"
   when: with_output is defined and with_output

@@ -1,4 +1,9 @@
 ---
+- name: Init Certificate Output
+  ansible.builtin.set_fact:
+    output_certificate: null
+  when: with_output is defined and with_output and output_certificate is not defined
+
 - name: Create a SSL/TLS Certificate
   google.cloud.gcp_compute_ssl_certificate:
     type: "{{ cloud_provider_resource_detail.certificate.type | default(omit) }}"
@@ -11,3 +16,10 @@
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: present
+  register: certificate_result
+
+# set_fact to print output globally
+- name: Set Certificate Output
+  set_fact:
+    output_certificate: "{{ output_certificate | combine({ cloud_provider_resource_detail.certificate.name : certificate_result }, recursive=True) }}"
+  when: with_output is defined and with_output
