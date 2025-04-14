@@ -1,4 +1,8 @@
 ---
+- name: Init Backend Bucket Output
+  ansible.builtin.set_fact:
+    output_backend_bucket: null
+  when: with_output is defined and with_output and output_backend_bucket is not defined
 
 - name: Create a Backend Bucket
   google.cloud.gcp_compute_backend_bucket:
@@ -10,3 +14,10 @@
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: present
+  register: backend_bucket_result
+
+# set_fact to print output globally
+- name: Set Backend Bucket Output
+  set_fact:
+    output_backend_bucket: "{{ output_backend_bucket | combine({ cloud_provider_resource_detail.backend_bucket.name : backend_bucket_result }, recursive=True) }}"
+  when: with_output is defined and with_output
