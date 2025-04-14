@@ -1,3 +1,0 @@
----
-  - name: Include HTTPS Proxy State
-    ansible.builtin.include_tasks: "{{ state | default('present') }}.yml"

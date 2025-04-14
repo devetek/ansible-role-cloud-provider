@@ -1,5 +1,5 @@
 ---
-- name: Create a Target HTTP Proxy
+- name: Delete a Target HTTP Proxy
   google.cloud.gcp_compute_target_http_proxy:
     name: "{{ cloud_provider_resource_detail.target_http_proxy.name }}"
     url_map: "{{ cloud_provider_resource_detail.target_http_proxy.url_map }}"
