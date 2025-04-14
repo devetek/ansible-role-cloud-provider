@@ -1,0 +1,30 @@
+---
+- name: Init Global Forwarding Rule Output
+  ansible.builtin.set_fact:
+    output_global_forwarding_rule: null
+  when: with_output is defined and with_output and output_global_forwarding_rule is not defined
+
+- name: Create a Global Forwarding Rule
+  google.cloud.gcp_compute_global_forwarding_rule:
+    name: "{{ cloud_provider_resource_detail.global_forwarding_rule.name }}"
+    description: "{{ cloud_provider_resource_detail.global_forwarding_rule.description | default(omit) }}"
+    target: "{{ cloud_provider_resource_detail.global_forwarding_rule.target }}"
+    metadata_filters: "{{ cloud_provider_resource_detail.global_forwarding_rule.metadata_filters | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.global_forwarding_rule.env_type | default(omit) }}"
+    network: "{{ cloud_provider_resource_detail.global_forwarding_rule.network | default(omit) }}"
+    ip_version: "{{ cloud_provider_resource_detail.global_forwarding_rule.ip_version | default(omit) }}"
+    ip_address: "{{ cloud_provider_resource_detail.global_forwarding_rule.ip_address | default(omit) }}"
+    ip_protocol: "{{ cloud_provider_resource_detail.global_forwarding_rule.ip_protocol | default(omit) }}"
+    load_balancing_scheme: "{{ cloud_provider_resource_detail.global_forwarding_rule.load_balancing_scheme | default('EXTERNAL') }}"
+    port_range: "{{ cloud_provider_resource_detail.global_forwarding_rule.port_range | default('80-80') }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: global_forwarding_rule_result
+  
+# set_fact to print output globally
+- name: Set Global Forwarding Rule Output
+  set_fact:
+    output_global_forwarding_rule: "{{ output_global_forwarding_rule | combine({ cloud_provider_resource_detail.global_forwarding_rule.name : global_forwarding_rule_result }, recursive=True) }}"
+  when: with_output is defined and with_output

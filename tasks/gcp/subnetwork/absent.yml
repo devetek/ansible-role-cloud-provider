@@ -1,0 +1,22 @@
+---
+- name: Get Info on a Network
+  gcp_compute_network_info:
+    filters:
+    - name = "{{ cloud_provider_resource_detail.network.name }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+  register: network
+
+- name: Delete a Subnetwork
+  google.cloud.gcp_compute_subnetwork:
+    name: "{{ item.name }}"
+    region: "{{ item.region }}"
+    network: "{{ network.resources[0] }}"
+    ip_cidr_range: "{{ item.ip_cidr_range }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "absent"
+  with_items: "{{ cloud_provider_resource_detail.subnetworks }}"
+  when: network.resources | length > 0

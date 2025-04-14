@@ -1,0 +1,15 @@
+---
+- name: Delete a Global External Address
+  google.cloud.gcp_compute_global_address:
+    name: "{{ cloud_provider_resource_detail.global_address.name }}"
+    description: "{{ cloud_provider_resource_detail.global_address.description | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.global_address.env_type | default(omit) }}"
+    ip_version: "{{ cloud_provider_resource_detail.global_address.ip_version | default(omit) }}"
+    address: "{{ cloud_provider_resource_detail.global_address.address | default(omit) }}"
+    address_type: "{{ cloud_provider_resource_detail.global_address.address_type | default('EXTERNAL') }}"
+    network: "{{ cloud_provider_resource_detail.global_address.network | default(omit) }}"
+    prefix_length: "{{ cloud_provider_resource_detail.global_address.prefix_length | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: absent

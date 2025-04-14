@@ -1,0 +1,4 @@
+---
+- name: GCP Resource Deletion
+  ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/main.yml"
+  loop: "{{ cloud_provider_resource_type | reverse }}"

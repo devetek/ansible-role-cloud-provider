@@ -1,0 +1,27 @@
+---
+
+- name: Create a Bucket
+  google.cloud.gcp_storage_bucket:
+    name: "{{ cloud_provider_resource_detail.bucket.name }}"
+    storage_class: "{{ cloud_provider_resource_detail.bucket.storage_class | default('STANDARD') }}"
+    location: "{{ cloud_provider_resource_detail.bucket.location | default(omit) }}"
+    predefined_default_object_acl: "{{ cloud_provider_resource_detail.bucket.predefined_default_object_acl | default('projectPrivate') }}"
+    cors: "{{ cloud_provider_resource_detail.bucket.cors | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: bucket
+
+# Storage Legacy Bucket Reader
+- block:
+  - name: Legacy - Create a Bucket Access Control
+    google.cloud.gcp_storage_bucket_access_control:
+      bucket: "{{ bucket }}"
+      entity: "{{ cloud_provider_resource_detail.bucket.acl.entity | default('allAuthenticatedUsers') }}"
+      role: "{{ cloud_provider_resource_detail.bucket.acl.role | default('READER') }}"
+      project: "{{ cloud_provider_auth.project_id }}"
+      auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+      service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+      state: present
+  when: cloud_provider_resource_detail.bucket.acl is defined

@@ -1,3 +1,0 @@
----
-  - name: Include Load Balancer Type
-    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.lb_type }}.yml"

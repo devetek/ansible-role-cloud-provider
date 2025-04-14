@@ -1,0 +1,9 @@
+---
+- name: Create a Network
+  google.cloud.gcp_compute_network:
+    name: "{{ cloud_provider_resource_detail.network.name }}"
+    auto_create_subnetworks: "{{ cloud_provider_resource_detail.network.auto_create_subnetworks }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "present"
