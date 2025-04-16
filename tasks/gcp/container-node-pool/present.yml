@@ -1,0 +1,28 @@
+---
+- name: Init Node Pool Output
+  ansible.builtin.set_fact:
+    output_container_node_pool: null
+  when: with_output is defined and with_output and output_container_node_pool is not defined
+
+- name: Create a Node Pool
+  google.cloud.gcp_container_node_pool:
+    name: "{{ cloud_provider_resource_detail.container_node_pool.name }}"
+    env_type: "{{ cloud_provider_resource_detail.container_node_pool.env_type | default(omit) }}"
+    initial_node_count: "{{ cloud_provider_resource_detail.container_node_pool.initial_node_count }}"
+    cluster: "{{ cloud_provider_resource_detail.container_node_pool.cluster }}"
+    location: "{{ cloud_provider_resource_detail.container_node_pool.location }}"
+    management: "{{ cloud_provider_resource_detail.container_node_pool.management | default(omit) }}"
+    autoscaling: "{{ cloud_provider_resource_detail.container_node_pool.autoscaling | default(omit) }}"
+    conditions: "{{ cloud_provider_resource_detail.container_node_pool.conditions | default(omit) }}"
+    config: "{{ cloud_provider_resource_detail.container_node_pool.config | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: present
+  register: container_node_pool_result
+
+# set_fact to print output globally
+- name: Set Node Pool Output
+  set_fact:
+    output_container_node_pool: "{{ output_container_node_pool | combine({ cloud_provider_resource_detail.container_node_pool.name : container_node_pool_result }, recursive=True) }}"
+  when: with_output is defined and with_output
