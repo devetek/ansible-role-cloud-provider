@@ -1,3 +1,0 @@
----
-  - name: Include Kubernetes Resource Type
-    ansible.builtin.include_tasks: "{{ cloud_provider_resource_detail.kube_init }}.yml"
