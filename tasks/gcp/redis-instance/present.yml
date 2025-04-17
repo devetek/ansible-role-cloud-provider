@@ -1,0 +1,37 @@
+---
+- name: Init Redis Instance Output
+  ansible.builtin.set_fact:
+    output_redis_instance: null
+  when: with_output is defined and with_output and output_redis_instance is not defined
+
+- name: Create a Redis Instance
+  google.cloud.gcp_redis_instance:
+    name: "{{ cloud_provider_resource_detail.redis_instance.name }}"
+    tier: "{{ cloud_provider_resource_detail.redis_instance.tier | default('BASIC') }}"
+    memory_size_gb: "{{ cloud_provider_resource_detail.redis_instance.memory_size_gb }}"
+    region: "{{ cloud_provider_resource_detail.redis_instance.region }}"
+    location_id: "{{ cloud_provider_resource_detail.redis_instance.location_id }}"
+    redis_version: "{{ cloud_provider_resource_detail.redis_instance.redis_version | default('REDIS_3_2') }}"
+    env_type: "{{ cloud_provider_resource_detail.redis_instance.env_type | default(omit) }}"
+    display_name: "{{ cloud_provider_resource_detail.redis_instance.display_name | default(omit) }}"
+    authorized_network: "{{ cloud_provider_resource_detail.redis_instance.authorized_network | default(omit) }}"
+    connect_mode: "{{ cloud_provider_resource_detail.redis_instance.connect_mode | default(omit) }}"
+    alternative_location_id: "{{ cloud_provider_resource_detail.redis_instance.alternative_location_id | default(omit) }}"
+    reserved_ip_range: "{{ cloud_provider_resource_detail.redis_instance.reserved_ip_range | default(omit) }}"
+    labels: "{{ cloud_provider_resource_detail.redis_instance.labels | default(omit) }}"
+    redis_configs: "{{ cloud_provider_resource_detail.redis_instance.redis_configs | default(omit) }}"
+    auth_enabled: "{{ cloud_provider_resource_detail.redis_instance.auth_enabled | default(omit) }}"
+    transit_encryption_mode: "{{ cloud_provider_resource_detail.redis_instance.transit_encryption_mode | default(omit) }}"
+    access_token: "{{ cloud_provider_resource_detail.redis_instance.access_token | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.redis_instance.scopes | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "present"
+  register: redis_instance_result
+  
+# set_fact to print output globally
+- name: Set Redis Instance Rule Output
+  set_fact:
+    output_redis_instance: "{{ output_redis_instance | combine({ cloud_provider_resource_detail.redis_instance.name : global_forwarding_rule_result }, recursive=True) }}"
+  when: with_output is defined and with_output
