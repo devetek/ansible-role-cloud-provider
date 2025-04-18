@@ -1,9 +1,21 @@
 ---
+- name: Init Network Output
+  ansible.builtin.set_fact:
+    output_compute_network: null
+  when: with_output is defined and with_output and output_compute_network is not defined
+
 - name: Create a Network
   google.cloud.gcp_compute_network:
-    name: "{{ cloud_provider_resource_detail.network.name }}"
-    auto_create_subnetworks: "{{ cloud_provider_resource_detail.network.auto_create_subnetworks }}"
+    name: "{{ cloud_provider_resource_detail.compute_network.name }}"
+    auto_create_subnetworks: "{{ cloud_provider_resource_detail.compute_network.auto_create_subnetworks | default('true') }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: "present"
+  register: compute_network_result
+
+# set_fact to print output globally
+- name: Set Network Output
+  set_fact:
+    output_compute_network: "{{ output_compute_network | combine({ cloud_provider_resource_detail.compute_network.name : compute_network_result }, recursive=True) }}"
+  when: with_output is defined and with_output

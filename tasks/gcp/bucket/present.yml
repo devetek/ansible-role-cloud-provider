@@ -1,4 +1,8 @@
 ---
+- name: Init Bucket Output
+  ansible.builtin.set_fact:
+    output_storage_bucket: null
+  when: with_output is defined and with_output and output_storage_bucket is not defined
 
 - name: Create a Bucket
   google.cloud.gcp_storage_bucket:
@@ -11,13 +15,13 @@
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
     state: present
-  register: bucket
+  register: storage_bucket_result
 
 # Storage Legacy Bucket Reader
 - block:
   - name: Legacy - Create a Bucket Access Control
     google.cloud.gcp_storage_bucket_access_control:
-      bucket: "{{ bucket }}"
+      bucket: "{{ storage_bucket_result }}"
       entity: "{{ cloud_provider_resource_detail.bucket.acl.entity | default('allAuthenticatedUsers') }}"
       role: "{{ cloud_provider_resource_detail.bucket.acl.role | default('READER') }}"
       project: "{{ cloud_provider_auth.project_id }}"
@@ -25,3 +29,9 @@
       service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
       state: present
   when: cloud_provider_resource_detail.bucket.acl is defined
+
+# set_fact to print output globally
+- name: Set Bucket Output
+  set_fact:
+    output_storage_bucket: "{{ output_storage_bucket | combine({ cloud_provider_resource_detail.storage_bucket.name : storage_bucket_result }, recursive=True) }}"
+  when: with_output is defined and with_output
