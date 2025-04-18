@@ -55,9 +55,11 @@ List of variables in ansible-role-cloud-provider:
 ```sh
 ---
 cloud_provider: "gcp" # gcp | aws | proxmox
-cloud_provider_auth: {} # depends to cloud provider
-cloud_provider_resource_type: "vm" # resource type creation
+cloud_provider_auth: {} # depend on provider
+cloud_provider_resource_type: # array of resource type
+  - "global-forwarding-rule"
 cloud_provider_resource_detail: {} # dictionary resource attribute detail
+state: "present" # present | absent
 ```
 
 Example Playbook
@@ -65,49 +67,55 @@ Example Playbook
 
 ```sh
 ---
+# includes all dependencies
+- name: Manage a Global Address
+  ansible.builtin.import_playbook: global-address.yaml
+  vars:
+    with_output: true
+    include_state: "present"
 
-- name: Create Bucket (GCS) and Backend Bucket
+- name: Manage a HTTPS Proxy (Backend URL Map Included)
+  ansible.builtin.import_playbook: target-https-proxy.yaml
+  vars:
+    with_output: true
+    include_state: "present"
+# includes all dependencies
+
+- name: Manage Global Forwarding Rule
   hosts: localhost
   gather_facts: false
   
   vars:
+    with_output: true
     cloud_provider: "gcp"
-    cloud_provider_resource_type: "bucket"
+    cloud_provider_resource_type:
+      - "global-forwarding-rule"
     cloud_provider_auth:
       project_id: "terpusat"
       auth_kind: "serviceaccount"
-      service_acount_token: "../credential.json"
+      service_acount_token: "../../credential.json"
     cloud_provider_resource_detail:
-      bucket_name: "bucket-dpanel-example"
-      storage_class: "STANDARD"
-      location: "asia-southeast2"
-      predefined_default_object_acl: "publicRead"
-      cors:
-        - max_age_seconds: 86400
-          method: "*"
-          origin: "*"
-      acl:
-        entity: "allUsers"
-        role: "READER"
-      backend_bucket:
-        name: "be-bucket"
-        description: "A BackendBucket to connect LNB w/ Storage Bucket"
-        enable_cdn: 'true'
+      global_forwarding_rule:
+        name: "global-forwarding-rule"
+        description: "Global Forwarding Rule"
+        ip_address: "{{ output_global_address['external-global-address'].address }}"
+        port_range: "443"
+        target: "{{ output_target_https_proxy['https-proxy'].selfLink }}"
+
 
   roles:
     - role: dpanel.cloud-provider
-
 ```
 
 License
 -------
 
-[MIT]
+GNU General Public License v3.0 or later
 
 Author Information
 ------------------
 
-[Nedya Prakasa]. Role created for [dPanel].
+[Nedya Prakasa]. Role for [dPanel].
 
 [dPanel]: https://cloud.terpusat.com/
 [Nedya Prakasa]: https://github.com/prakasa1904
