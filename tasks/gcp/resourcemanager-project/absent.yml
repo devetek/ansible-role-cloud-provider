@@ -1,0 +1,13 @@
+---
+- name: Delete a GCP Project
+  google.cloud.gcp_resourcemanager_project:
+    id: "{{ cloud_provider_auth.resourcemanager_project.id }}"
+    name: "{{ cloud_provider_resource_detail.resourcemanager_project.name }}"
+    env_type: "{{ cloud_provider_resource_detail.resourcemanager_project.env_type | default(omit) }}"
+    parent: "{{ cloud_provider_resource_detail.resourcemanager_project.parent | default(omit) }}"
+    labels: "{{ cloud_provider_resource_detail.resourcemanager_project.labels | default(omit) }}"
+    project: "{{ cloud_provider_resource_detail.resourcemanager_project.project | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.resourcemanager_project.scopes | default(omit) }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "absent"
