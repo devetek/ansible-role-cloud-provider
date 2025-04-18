@@ -110,12 +110,12 @@ Example Playbook
 License
 -------
 
-[MIT]
+GNU General Public License v3.0 or later
 
 Author Information
 ------------------
 
-[Nedya Prakasa]. Role created for [dPanel].
+[Nedya Prakasa]. Role for [dPanel].
 
 [dPanel]: https://cloud.terpusat.com/
 [Nedya Prakasa]: https://github.com/prakasa1904
