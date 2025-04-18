@@ -1,6 +1,6 @@
 ---
 
-- name: Delete a External Address (NAT)
+- name: Delete a External Address
   google.cloud.gcp_compute_address:
     name: "{{ cloud_provider_resource_detail.compute_address.name }}"
     description: "{{ cloud_provider_resource_detail.compute_address.description | default(omit) }}"
@@ -18,4 +18,4 @@
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: "{{ state | default('present') }}"
+    state: "absent"

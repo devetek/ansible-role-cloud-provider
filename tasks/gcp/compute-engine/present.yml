@@ -1,74 +1,32 @@
 ---
-
-- name: Get Info on a Disk
-  google.cloud.gcp_compute_disk_info:
-    zone: "{{ cloud_provider_resource_detail.disk.zone }}"
-    filters:
-    - name = {{ cloud_provider_resource_detail.disk.name }}
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-  register: disk
-
-
-- name: Get Info on a Network
-  google.cloud.gcp_compute_network_info:
-    filters:
-    - name = {{ cloud_provider_resource_detail.network.name }}
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-  register: network
-
-
-- name: Get Info on a Subnetwork
-  google.cloud.gcp_compute_subnetwork_info:
-    region: "{{ item.region }}"
-    filters:
-    - name = {{ item.name }}
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-  with_items: "{{ cloud_provider_resource_detail.subnetworks }}"
-  when: cloud_provider_resource_detail.subnetworks | length > 0
-  register: subnetworks
-
-- name: Get Info on an Address
-  google.cloud.gcp_compute_address_info:
-    region: "{{ cloud_provider_resource_detail.compute_address.region }}"
-    filters:
-    - name = {{ cloud_provider_resource_detail.compute_address.name }}
-    project: "{{ cloud_provider_auth.project_id }}"
-    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-  register: address
-  when: cloud_provider_resource_detail.compute_address is defined
+- name: Init Compute Engine Output
+  ansible.builtin.set_fact:
+    output_compute_instance: null
+  when: with_output is defined and with_output and output_compute_instance is not defined
 
 - name: Create a Instance (Compute Engine)
   google.cloud.gcp_compute_instance:
-    name: "{{ cloud_provider_resource_detail.instance.name }}"
-    zone: "{{ cloud_provider_resource_detail.instance.zone }}"
-    machine_type: "{{ cloud_provider_resource_detail.instance.machine_type | default('n1-standard-1') }}"
-    tags: "{{ cloud_provider_resource_detail.instance.tags | default(omit) }}"
-    scopes: "{{ cloud_provider_resource_detail.instance.scopes | default(omit) }}"
-    scheduling: "{{ cloud_provider_resource_detail.instance.scheduling | default(omit) }}"
-    can_ip_forward: "{{ cloud_provider_resource_detail.instance.can_ip_forward | default(omit) }}"
-    min_cpu_platform: "{{ cloud_provider_resource_detail.instance.min_cpu_platform | default(omit) }}"
-    confidential_instance_config: "{{ cloud_provider_resource_detail.instance.confidential_instance_config | default(omit) }}"
-    disks:
-    - auto_delete: true
-      boot: 'true'
-      source: "{{ disk.resources[0] }}"
-    metadata: "{{ cloud_provider_resource_detail.instance.metadata | default(omit) }}"
-    labels: "{{ cloud_provider_resource_detail.instance.labels | default(omit) }}"
-    network_interfaces:
-    - network: "{{ network.resources[0] }}"
-      subnetwork: "{{ subnetworks.results[0].resources[0] }}"
-      access_configs:
-      - name: External NAT
-        nat_ip: "{{ address.resources[0] | default(omit) }}"
-        type: ONE_TO_ONE_NAT
+    name: "{{ cloud_provider_resource_detail.compute_instance.name }}"
+    zone: "{{ cloud_provider_resource_detail.compute_instance.zone }}"
+    machine_type: "{{ cloud_provider_resource_detail.compute_instance.machine_type | default('n1-standard-1') }}"
+    tags: "{{ cloud_provider_resource_detail.compute_instance.tags | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.compute_instance.scopes | default(omit) }}"
+    scheduling: "{{ cloud_provider_resource_detail.compute_instance.scheduling | default(omit) }}"
+    can_ip_forward: "{{ cloud_provider_resource_detail.compute_instance.can_ip_forward | default(omit) }}"
+    min_cpu_platform: "{{ cloud_provider_resource_detail.compute_instance.min_cpu_platform | default(omit) }}"
+    confidential_instance_config: "{{ cloud_provider_resource_detail.compute_instance.confidential_instance_config | default(omit) }}"
+    disks: "{{ cloud_provider_resource_detail.compute_instance.disks }}"
+    metadata: "{{ cloud_provider_resource_detail.compute_instance.metadata | default(omit) }}"
+    labels: "{{ cloud_provider_resource_detail.compute_instance.labels | default(omit) }}"
+    network_interfaces: "{{ cloud_provider_resource_detail.compute_instance.network_interfaces }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
-    state: "{{ state | default('present') }}"
+    state: "present"
+  register: compute_instance_result
+  
+# set_fact to print output globally
+- name: Set Compute Engine Output
+  set_fact:
+    output_compute_instance: "{{ output_compute_instance | combine({ cloud_provider_resource_detail.compute_instance.name : compute_instance_result }, recursive=True) }}"
+  when: with_output is defined and with_output
