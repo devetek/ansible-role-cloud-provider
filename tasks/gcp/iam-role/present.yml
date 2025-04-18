@@ -1,0 +1,26 @@
+---
+- name: Init Custom Role Output
+  ansible.builtin.set_fact:
+    output_iam_role: null
+  when: with_output is defined and with_output and output_iam_role is not defined
+
+- name: Create a Custom Role
+  google.cloud.gcp_iam_role:
+    name: "{{ cloud_provider_resource_detail.iam_role.name }}"
+    title: "{{ cloud_provider_resource_detail.iam_role.title | default(omit) }}"
+    description: "{{ cloud_provider_resource_detail.iam_role.description | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.iam_role.env_type | default(omit) }}"
+    included_permissions: "{{ cloud_provider_resource_detail.iam_role.included_permissions | default(omit) }}"
+    stage: "{{ cloud_provider_resource_detail.iam_role.stage | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.iam_role.scopes | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "present"
+  register: iam_role_result
+
+# set_fact to print output globally
+- name: Set Custom Role Output
+  set_fact:
+    output_iam_role: "{{ output_iam_role | combine({ cloud_provider_resource_detail.iam_role.name : iam_role_result }, recursive=True) }}"
+  when: with_output is defined and with_output
