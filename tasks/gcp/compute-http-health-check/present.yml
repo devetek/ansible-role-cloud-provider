@@ -1,10 +1,10 @@
 ---
-- name: Init Health Check Output
+- name: Init HTTP Health Check Output
   ansible.builtin.set_fact:
     output_compute_http_health_check: null
   when: with_output is defined and with_output and output_compute_http_health_check is not defined
 
-- name: Create a Health Check
+- name: Create a HTTP Health Check
   google.cloud.gcp_compute_http_health_check:
     name: "{{ cloud_provider_resource_detail.compute_http_health_check.name }}"
     description: "{{ cloud_provider_resource_detail.compute_http_health_check.description | default(omit) }}"
@@ -23,7 +23,7 @@
   register: compute_http_health_check_result
   
 # set_fact to print output globally
-- name: Set Health Check Output
+- name: Set HTTP Health Check Output
   set_fact:
     output_compute_http_health_check: "{{ output_compute_http_health_check | combine({ cloud_provider_resource_detail.compute_http_health_check.name : compute_http_health_check_result }, recursive=True) }}"
   when: with_output is defined and with_output

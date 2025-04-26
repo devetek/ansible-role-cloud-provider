@@ -1,0 +1,35 @@
+---
+- name: Init Health Check Output
+  ansible.builtin.set_fact:
+    output_compute_health_check: null
+  when: with_output is defined and with_output and output_compute_health_check is not defined
+
+- name: Create a Health Check
+  google.cloud.gcp_compute_health_check:
+    name: "{{ cloud_provider_resource_detail.compute_health_check.name }}"
+    description: "{{ cloud_provider_resource_detail.compute_health_check.description | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.compute_health_check.env_type | default(omit) }}"
+    type: "{{ cloud_provider_resource_detail.compute_health_check.type | default(omit) }}"
+    timeout_sec: "{{ cloud_provider_resource_detail.compute_health_check.timeout_sec | default(omit) }}"
+    check_interval_sec: "{{ cloud_provider_resource_detail.compute_health_check.check_interval_sec | default(omit) }}"
+    healthy_threshold: "{{ cloud_provider_resource_detail.compute_health_check.healthy_threshold | default(omit) }}"
+    unhealthy_threshold: "{{ cloud_provider_resource_detail.compute_health_check.unhealthy_threshold | default(omit) }}"
+    grpc_health_check: "{{ cloud_provider_resource_detail.compute_health_check.grpc_health_check | default(omit) }}"
+    http2_health_check: "{{ cloud_provider_resource_detail.compute_health_check.http2_health_check | default(omit) }}"
+    http_health_check: "{{ cloud_provider_resource_detail.compute_health_check.http_health_check | default(omit) }}"
+    https_health_check: "{{ cloud_provider_resource_detail.compute_health_check.https_health_check | default(omit) }}"
+    ssl_health_check: "{{ cloud_provider_resource_detail.compute_health_check.ssl_health_check | default(omit) }}"
+    tcp_health_check: "{{ cloud_provider_resource_detail.compute_health_check.tcp_health_check | default(omit) }}"
+    log_config: "{{ cloud_provider_resource_detail.compute_health_check.log_config | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.compute_health_check.scopes | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "present"
+  register: compute_health_check_result
+  
+# set_fact to print output globally
+- name: Set Health Check Output
+  set_fact:
+    output_compute_health_check: "{{ output_compute_health_check | combine({ cloud_provider_resource_detail.compute_health_check.name : compute_health_check_result }, recursive=True) }}"
+  when: with_output is defined and with_output
