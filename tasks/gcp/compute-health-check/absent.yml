@@ -1,6 +1,6 @@
 ---
 - name: Delete a Health Check
-  google.cloud.gcp_compute_http_health_check:
+  google.cloud.gcp_compute_health_check:
     name: "{{ cloud_provider_resource_detail.compute_health_check.name }}"
     description: "{{ cloud_provider_resource_detail.compute_health_check.description | default(omit) }}"
     env_type: "{{ cloud_provider_resource_detail.compute_health_check.env_type | default(omit) }}"
