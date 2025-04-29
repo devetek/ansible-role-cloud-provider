@@ -1,0 +1,44 @@
+---
+- name: Init Backend Service Output
+  ansible.builtin.set_fact:
+    output_compute_backend_service: null
+  when: with_output is defined and with_output and output_compute_backend_service is not defined
+
+- name: Create a Backend Service
+  google.cloud.gcp_compute_backend_service:
+    name: "{{ cloud_provider_resource_detail.compute_backend_service.name }}"
+    description: "{{ cloud_provider_resource_detail.compute_backend_service.description | default(omit) }}"
+    env_type: "{{ cloud_provider_resource_detail.compute_backend_service.env_type | default(omit) }}"
+    affinity_cookie_ttl_sec: "{{ cloud_provider_resource_detail.compute_backend_service.affinity_cookie_ttl_sec | default(omit) }}"
+    backends: "{{ cloud_provider_resource_detail.compute_backend_service.backends | default(omit) }}"
+    enable_cdn: "{{ cloud_provider_resource_detail.compute_backend_service.enable_cdn | default(omit) }}"
+    cdn_policy: "{{ cloud_provider_resource_detail.compute_backend_service.cdn_policy | default(omit) }}"
+    timeout_sec: "{{ cloud_provider_resource_detail.compute_backend_service.timeout_sec | default(omit) }}"
+    circuit_breakers: "{{ cloud_provider_resource_detail.compute_backend_service.circuit_breakers | default(omit) }}"
+    connection_draining: "{{ cloud_provider_resource_detail.compute_backend_service.connection_draining | default(omit) }}"
+    consistent_hash: "{{ cloud_provider_resource_detail.compute_backend_service.consistent_hash | default(omit) }}"
+    custom_request_headers: "{{ cloud_provider_resource_detail.compute_backend_service.custom_request_headers | default(omit) }}"
+    custom_response_headers: "{{ cloud_provider_resource_detail.compute_backend_service.custom_response_headers | default(omit) }}"
+    fingerprint: "{{ cloud_provider_resource_detail.compute_backend_service.fingerprint | default(omit) }}"
+    health_checks: "{{ cloud_provider_resource_detail.compute_backend_service.health_checks | default(omit) }}"
+    iap: "{{ cloud_provider_resource_detail.compute_backend_service.iap | default(omit) }}"
+    load_balancing_scheme: "{{ cloud_provider_resource_detail.compute_backend_service.load_balancing_scheme | default(omit) }}"
+    locality_lb_policy: "{{ cloud_provider_resource_detail.compute_backend_service.locality_lb_policy | default(omit) }}"
+    log_config: "{{ cloud_provider_resource_detail.compute_backend_service.log_config | default(omit) }}"
+    outlier_detection: "{{ cloud_provider_resource_detail.compute_backend_service.outlier_detection | default(omit) }}"
+    port_name: "{{ cloud_provider_resource_detail.compute_backend_service.port_name | default(omit) }}"
+    protocol: "{{ cloud_provider_resource_detail.compute_backend_service.protocol | default(omit) }}"
+    scopes: "{{ cloud_provider_resource_detail.compute_backend_service.scopes | default(omit) }}"
+    security_policy: "{{ cloud_provider_resource_detail.compute_backend_service.security_policy | default(omit) }}"
+    session_affinity: "{{ cloud_provider_resource_detail.compute_backend_service.session_affinity | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "present"
+  register: compute_backend_service_result
+  
+# set_fact to print output globally
+- name: Set Backend Service Output
+  set_fact:
+    output_compute_backend_service: "{{ output_compute_backend_service | combine({ cloud_provider_resource_detail.compute_backend_service.name : compute_backend_service_result }, recursive=True) }}"
+  when: with_output is defined and with_output

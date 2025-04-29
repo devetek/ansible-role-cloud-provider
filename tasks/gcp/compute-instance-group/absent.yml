@@ -1,0 +1,16 @@
+---
+- name: Delete a Instance Group
+  google.cloud.gcp_compute_instance_group:
+    name: "{{ cloud_provider_resource_detail.compute_instance_group.name }}"
+    description: "{{ cloud_provider_resource_detail.compute_instance_group.description | default(omit) }}"
+    region: "{{ cloud_provider_resource_detail.compute_instance_group.region | default(omit) }}"
+    zone: "{{ cloud_provider_resource_detail.compute_instance_group.zone }}"
+    env_type: "{{ cloud_provider_resource_detail.compute_instance_group.env_type | default(omit) }}"
+    instances: "{{ cloud_provider_resource_detail.compute_instance_group.instances | default(omit) }}"
+    named_ports: "{{ cloud_provider_resource_detail.compute_instance_group.named_ports | default(omit) }}"
+    network: "{{ cloud_provider_resource_detail.compute_instance_group.network | default(omit) }}"
+    subnetwork: "{{ cloud_provider_resource_detail.compute_instance_group.subnetwork | default(omit) }}"
+    project: "{{ cloud_provider_auth.project_id }}"
+    auth_kind: "{{ cloud_provider_auth.auth_kind }}"
+    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    state: "absent"
