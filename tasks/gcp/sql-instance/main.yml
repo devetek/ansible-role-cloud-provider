@@ -1,0 +1,3 @@
+---
+  - name: Include GCP SQL Instance Management
+    ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/{{ include_state | default(state) }}.yml"
