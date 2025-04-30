@@ -1,5 +1,5 @@
 ---
-- name: Init Network Output
+- name: Init SQL Instance Output
   ansible.builtin.set_fact:
     output_sql_instance: null
   when: with_output is defined and with_output and output_sql_instance is not defined
