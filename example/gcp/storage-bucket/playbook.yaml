@@ -1,0 +1,29 @@
+---
+- name: Manage a Bucket
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    cloud_provider: "gcp"
+    cloud_provider_resource_type:
+      - "storage-bucket"
+    cloud_provider_auth:
+      project_id: "dpanel-dev"
+      auth_kind: "serviceaccount"
+      service_acount_token: "./gcp-credential.json"
+    cloud_provider_resource_detail:
+      storage_bucket:
+        name: "dpanel-example-bucket"
+        storage_class: "STANDARD"
+        location: "asia-southeast2"
+        predefined_default_object_acl: "publicRead"
+        cors:
+          - max_age_seconds: 86400
+            method: "*"
+            origin: "*"
+        acl:
+          entity: "allUsers"
+          role: "READER"
+
+  roles:
+    - role: dpanel.cloud-provider
