@@ -1,0 +1,68 @@
+---
+# includes all dependencies
+- name: Manage a Network
+  ansible.builtin.import_playbook: ./../network/playbook.yaml
+  vars:
+    with_output: true
+    include_state: "present"
+  when:
+    - state == "present"
+
+- name: Manage a External Compute Address
+  ansible.builtin.import_playbook: ./../compute-address/playbook.yaml
+  vars:
+    with_output: true
+    include_state: "present"
+  when:
+    - state == "present"
+
+- name: Manage a Compute Disk
+  ansible.builtin.import_playbook: ./../compute-disk/playbook.yaml
+  vars:
+    with_output: true
+    include_state: "present"
+  when:
+    - state == "present"
+# includes all dependencies
+
+- name: Manage a Compute Engine
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    cloud_provider: "gcp"
+    cloud_provider_resource_type:
+      - "compute-engine"
+    cloud_provider_auth:
+      project_id: "dpanel-dev"
+      auth_kind: "serviceaccount"
+      service_acount_token: "./gcp-credential.json"
+    cloud_provider_resource_detail:
+      compute_instance:
+        name: "compute-instance-example"
+        zone: "asia-southeast2-a"
+        machine_type: "n1-standard-1"
+        can_ip_forward: true
+        labels:
+          creator: "dpanel"
+          environment: "development"
+        metadata:
+          startup-script: |
+            #! /bin/bash
+            echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCriWmP7jFLtwfirPpZRkR4uO8mNqxOq721QLB00qg8/Qy+9NSem6VXfLLv3P226PU7NH67risXoa18V0q+x+UjwYQsVBCBYWCkndDwsY53KWtkyHtrUlXIhfWMv4AJ6ukUM+nAACov6NgxWGApHCRNYofA3yVHG3PiC9GVFc0xpVT2uNqKU6xbANulzTkWZqoyi6spLjug7uzsUWC1PHS+eu5dGA7qK1+F/PfDFEVsnepfu+0b2EgWVYaW0Q7FYsj+tLp3nXPyz+R5MBujz0tuDI7M55tKFcOsEcZHFTcv5hwmyWbo+4jp8ib0sm20n2Zlmi+1rYQXsrlP7Gfo84Ej4NokLUFygk76SXOBIPPcQ3ozkUuuj6rdH3saIKY+75o2rWpQtEd7Om5RxhrzHGLZQ+ZLMVFT4cpfluFPdsBbUv/NPX2yFITpkfchYLq1nX0Guy2fmGZuPdp1KzQLFIwsj6x8mqy0s3mnlM5gtZ3taQV0tm8Yw707Q4BHJwohvQ8=" >> /root/.ssh/authorized_keys
+        tags:
+          items:
+          - "http-server"
+          - "https-server"
+        disks:
+        - auto_delete: 'true'
+          boot: 'true'
+          source: "{{ output_compute_disk['dpanel-example-compute-disk'] | default(omit) }}"
+        network_interfaces:
+        - network: "{{ output_compute_network['dpanel-example-network'] | default(omit) }}"
+          access_configs:
+          - name: External NAT
+            nat_ip: "{{ output_compute_address['dpanel-example-compute-address'] | default(omit) }}"
+            type: ONE_TO_ONE_NAT
+        service_accounts:
+        - email: "dpanel-cloud-platform@dpanel-dev.iam.gserviceaccount.com"

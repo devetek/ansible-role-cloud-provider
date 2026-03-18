@@ -1,4 +1,4 @@
-[WIP] Ansible role: Cloud Provider Creators (GCP / AWS / Azure)
+[WIP] Ansible role: Cloud Provider Creators (GCP / Proxmox / Openstack / AWS / Azure / etc)
 =========
 
 This Ansible role is designed to automate the provisioning, configuration, and management of cloud resources across various cloud providers. It simplifies and streamlines tasks such as creating, updating, and deleting resources like virtual machines, storage, networking, and more.
@@ -19,13 +19,18 @@ This role integrates seamlessly into CI/CD pipelines, enabling automated infrast
 Prerequisites
 ------------
 
-This role requires the `google.cloud` Ansible collection to interact with Google Cloud services. Unfortunately, the official `google.cloud` collection has not been updated to support the latest Google Cloud Platform API. Therefore, it is necessary to route the target dependency from a custom Git URL. Install the collection using the following steps:
+This role relies on specific Ansible collections to interact with various cloud providers. Ensure that the necessary collections are installed and available in your Ansible environment.
+- gooogle.cloud
+- community.proxmox
 
-### 1. Install `google.cloud` with CLI or file `requirements.yml`
+Install the collection using the following steps:
+
+### 1. Install with CLI or file `requirements.yml`
 
 - CLI:
 ```sh
 ansible-galaxy collection install git+https://github.com/prakasa1904/google.cloud.git,master
+ansible-galaxy collection install community.proxmox:1.6.0
 ```
 
 - requirements.yml:
@@ -34,6 +39,8 @@ collections:
   - name: https://github.com/prakasa1904/google.cloud.git
     type: git
     version: master
+  - name: community.proxmox
+    version: 1.6.0
 ```
 Execute command: `ansible-galaxy install -r requirements.yml`
 
@@ -42,7 +49,7 @@ Execute command: `ansible-galaxy install -r requirements.yml`
 After installation, you can verify that the collection is correctly installed by running:
 
 ```sh
-ansible-galaxy collection list google.cloud
+ansible-galaxy collection list
 ```
 
 This command will display the installed version and confirm that it's sourced from the custom repository.
