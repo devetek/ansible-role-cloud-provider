@@ -12,6 +12,7 @@
     
     # LXC Container parameters
     vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    timeout: "{{ cloud_provider_resource_detail.timeout | default(180) }}"
     force: "{{ cloud_provider_resource_detail.force | default(omit) }}"
     # LXC Container parameters
     state: stopped
@@ -28,5 +29,7 @@
     
     # LXC Container parameters
     vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    timeout: "{{ cloud_provider_resource_detail.timeout | default(180) }}"
+    force: "{{ cloud_provider_resource_detail.force | default(omit) }}"
     # LXC Container parameters
     state: absent
