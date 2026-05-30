@@ -256,8 +256,9 @@
       }}.
   when:
     - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
     - biznetgio_vm_keypair_import_response is defined
-    - biznetgio_vm_keypair_import_response.status not in [200, 201, 202]
+    - (biznetgio_vm_keypair_import_response.status | default(0) | int) not in [200, 201, 202]
 
 - name: Normalize Biznet Gio NEO Lite imported keypair response
   ansible.builtin.set_fact:
@@ -274,8 +275,9 @@
       }}
   when:
     - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
     - biznetgio_vm_keypair_import_response is defined
-    - biznetgio_vm_keypair_import_response.status in [200, 201, 202]
+    - (biznetgio_vm_keypair_import_response.status | default(0) | int) in [200, 201, 202]
   no_log: true
 
 - name: Set Biznet Gio NEO Lite keypair ID from import response
