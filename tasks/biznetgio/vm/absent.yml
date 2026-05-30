@@ -1,0 +1,185 @@
+---
+- name: Validate Biznet Gio NEO Lite VM delete input
+  ansible.builtin.assert:
+    that:
+      - cloud_provider_auth.token | default(cloud_provider_auth.x_token | default(cloud_provider_auth.api_token | default(''))) | length > 0
+      - cloud_provider_resource_detail.vm is defined
+      - cloud_provider_resource_detail.vm.account_id is defined or cloud_provider_resource_detail.vm.id is defined or cloud_provider_resource_detail.vm.uuid is defined or cloud_provider_resource_detail.vm.vm_name is defined or cloud_provider_resource_detail.vm.name is defined
+    fail_msg: "Biznet Gio NEO Lite VM deletion requires auth.token and vm.account_id/id/uuid or vm.vm_name/name."
+
+- name: Set Biznet Gio NEO Lite VM deletion variables
+  ansible.builtin.set_fact:
+    biznetgio_api_base_url_raw: "{{ cloud_provider_auth.api_url | default(cloud_provider_auth.api_base_url | default(cloud_provider_auth.base_url | default('https://api.portal.biznetgio.com'))) | regex_replace('/+$', '') }}"
+    biznetgio_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.x_token | default(cloud_provider_auth.api_token)) }}"
+    biznetgio_vm: "{{ cloud_provider_resource_detail.vm }}"
+    biznetgio_vm_name: "{{ cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name | default('')) }}"
+    biznetgio_vm_account_id: "{{ cloud_provider_resource_detail.vm.account_id | default(cloud_provider_resource_detail.vm.id | default(cloud_provider_resource_detail.vm.uuid | default(''))) }}"
+  no_log: true
+
+- name: Normalize Biznet Gio API base URL for deletion
+  ansible.builtin.set_fact:
+    biznetgio_api_base_url: "{{ biznetgio_api_base_url_raw if biznetgio_api_base_url_raw is search('/v1$') else biznetgio_api_base_url_raw ~ '/v1' }}"
+
+- name: List Biznet Gio NEO Lite accounts for deletion
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/accounts"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 401
+      - 403
+      - 422
+      - 500
+  register: biznetgio_vm_accounts_response
+  changed_when: false
+  failed_when: false
+  when: biznetgio_vm_account_id | string | length == 0
+  no_log: true
+
+- name: Fail when Biznet Gio NEO Lite accounts cannot be listed for deletion
+  ansible.builtin.fail:
+    msg: >-
+      Biznet Gio NEO Lite account list failed before deletion
+      (status={{ biznetgio_vm_accounts_response.status | default('unknown') }},
+      path=/neolites/accounts).
+      Provider response: {{
+        biznetgio_vm_accounts_response.json.detail
+        | default(biznetgio_vm_accounts_response.json.message
+        | default(biznetgio_vm_accounts_response.json.error
+        | default(biznetgio_vm_accounts_response.content
+        | default(biznetgio_vm_accounts_response.msg | default('empty provider response')))))
+      }}.
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_accounts_response.status | default(0) | int != 200
+
+- name: Normalize Biznet Gio NEO Lite account list for deletion
+  ansible.builtin.set_fact:
+    biznetgio_vm_accounts_list: >-
+      {{
+        (
+          biznetgio_vm_accounts_response.json.data
+          | default(biznetgio_vm_accounts_response.json.items
+          | default(biznetgio_vm_accounts_response.json.results
+          | default(biznetgio_vm_accounts_response.json.accounts
+          | default(biznetgio_vm_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_accounts_response.json | default([]))
+      }}
+  when: biznetgio_vm_account_id | string | length == 0
+
+- name: Resolve Biznet Gio NEO Lite VM to delete by vm_name
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | default([])
+          | selectattr('vm_name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when: biznetgio_vm_account_id | string | length == 0
+
+- name: Resolve Biznet Gio NEO Lite VM to delete by name
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | default([])
+          | selectattr('name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_existing | default({}) | length == 0
+
+- name: Resolve Biznet Gio NEO Lite VM to delete by hostname
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | default([])
+          | selectattr('hostname', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_existing | default({}) | length == 0
+
+- name: Set Biznet Gio NEO Lite account ID from deletion lookup
+  ansible.builtin.set_fact:
+    biznetgio_vm_account_id: >-
+      {{
+        biznetgio_vm_existing.account_id
+        | default(biznetgio_vm_existing.id
+        | default(biznetgio_vm_existing.service_id
+        | default(biznetgio_vm_existing.account.id | default(''))))
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_existing | default({}) | length > 0
+
+- name: Delete Biznet Gio NEO Lite VM
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/{{ biznetgio_vm_account_id }}"
+    method: DELETE
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 202
+      - 204
+      - 400
+      - 401
+      - 403
+      - 404
+      - 409
+      - 422
+      - 500
+  register: biznetgio_vm_delete_response
+  changed_when: biznetgio_vm_delete_response.status in [200, 202, 204]
+  failed_when: false
+  when: biznetgio_vm_account_id | string | length > 0
+  no_log: true
+
+- name: Fail when Biznet Gio NEO Lite VM deletion fails
+  ansible.builtin.fail:
+    msg: >-
+      Biznet Gio NEO Lite VM deletion failed
+      (status={{ biznetgio_vm_delete_response.status | default('unknown') }},
+      path=/neolites/{{ biznetgio_vm_account_id }},
+      vm_name={{ biznetgio_vm_name | default('') }}).
+      Provider response: {{
+        biznetgio_vm_delete_response.json.detail
+        | default(biznetgio_vm_delete_response.json.message
+        | default(biznetgio_vm_delete_response.json.error
+        | default(biznetgio_vm_delete_response.json.errors
+        | default(biznetgio_vm_delete_response.content
+        | default(biznetgio_vm_delete_response.msg | default('empty provider response'))))))
+      }}.
+  when:
+    - biznetgio_vm_account_id | string | length > 0
+    - biznetgio_vm_delete_response.status not in [200, 202, 204, 404]
+
+- name: Set Biznet Gio NEO Lite VM deletion output
+  ansible.builtin.set_fact:
+    output_biznetgio_vm: "{{ output_biznetgio_vm | default({}) | combine({ biznetgio_vm_name | default(biznetgio_vm_account_id): {'deleted': true, 'id': biznetgio_vm_account_id | string, 'account_id': biznetgio_vm_account_id | string, 'name': biznetgio_vm_name | default(''), 'vm_name': biznetgio_vm_name | default('')} }, recursive=True) }}"
+    output_vm: "{{ output_vm | default({}) | combine({ biznetgio_vm_name | default(biznetgio_vm_account_id): {'deleted': true, 'id': biznetgio_vm_account_id | string, 'account_id': biznetgio_vm_account_id | string, 'name': biznetgio_vm_name | default(''), 'vm_name': biznetgio_vm_name | default('')} }, recursive=True) }}"
+  when: with_output is defined and with_output

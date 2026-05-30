@@ -1,0 +1,493 @@
+---
+- name: Validate Biznet Gio NEO Lite VM create input
+  ansible.builtin.assert:
+    that:
+      - cloud_provider_auth.token | default(cloud_provider_auth.x_token | default(cloud_provider_auth.api_token | default(''))) | length > 0
+      - cloud_provider_resource_detail.vm is defined
+      - cloud_provider_resource_detail.vm.product_id is defined
+      - cloud_provider_resource_detail.vm.cycle is defined
+      - cloud_provider_resource_detail.vm.select_os is defined
+      - cloud_provider_resource_detail.vm.keypair_id is defined
+      - cloud_provider_resource_detail.vm.ssh_and_console_user is defined
+      - cloud_provider_resource_detail.vm.console_password is defined
+      - cloud_provider_resource_detail.vm.vm_name is defined or cloud_provider_resource_detail.vm.name is defined
+    fail_msg: "Biznet Gio NEO Lite VM creation requires auth.token and vm product_id, cycle, select_os, keypair_id, vm_name, ssh_and_console_user, and console_password."
+
+- name: Set Biznet Gio NEO Lite VM variables
+  ansible.builtin.set_fact:
+    biznetgio_api_base_url_raw: "{{ cloud_provider_auth.api_url | default(cloud_provider_auth.api_base_url | default(cloud_provider_auth.base_url | default('https://api.portal.biznetgio.com'))) | regex_replace('/+$', '') }}"
+    biznetgio_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.x_token | default(cloud_provider_auth.api_token)) }}"
+    biznetgio_vm: "{{ cloud_provider_resource_detail.vm }}"
+    biznetgio_vm_name: "{{ cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name) }}"
+    biznetgio_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(biznetgio_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
+    biznetgio_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(biznetgio_vm_default_wait_delay | default(10))) | int, 1] | max }}"
+    biznetgio_vm_create_timeout: "{{ [cloud_provider_resource_detail.vm.create_timeout | default(cloud_provider_auth.vm_create_timeout | default(biznetgio_vm_default_create_timeout | default(120))) | int, 1] | max }}"
+    biznetgio_vm_create_success_statuses:
+      - 200
+      - 201
+      - 202
+  no_log: true
+
+- name: Normalize Biznet Gio API base URL
+  ansible.builtin.set_fact:
+    biznetgio_api_base_url: "{{ biznetgio_api_base_url_raw if biznetgio_api_base_url_raw is search('/v1$') else biznetgio_api_base_url_raw ~ '/v1' }}"
+    biznetgio_vm_wait_retries: "{{ [((biznetgio_vm_wait_timeout | int) / (biznetgio_vm_wait_delay | int)) | round(0, 'ceil') | int, 1] | max }}"
+
+- name: List Biznet Gio NEO Lite accounts
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/accounts"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 401
+      - 403
+      - 422
+      - 500
+  register: biznetgio_vm_accounts_response
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Fail when Biznet Gio NEO Lite accounts cannot be listed
+  ansible.builtin.fail:
+    msg: >-
+      Biznet Gio NEO Lite account list failed
+      (status={{ biznetgio_vm_accounts_response.status | default('unknown') }},
+      path=/neolites/accounts).
+      Provider response: {{
+        biznetgio_vm_accounts_response.json.detail
+        | default(biznetgio_vm_accounts_response.json.message
+        | default(biznetgio_vm_accounts_response.json.error
+        | default(biznetgio_vm_accounts_response.content
+        | default(biznetgio_vm_accounts_response.msg | default('empty provider response')))))
+      }}.
+  when: biznetgio_vm_accounts_response.status | default(0) | int != 200
+
+- name: Normalize Biznet Gio NEO Lite account list
+  ansible.builtin.set_fact:
+    biznetgio_vm_accounts_list: >-
+      {{
+        (
+          biznetgio_vm_accounts_response.json.data
+          | default(biznetgio_vm_accounts_response.json.items
+          | default(biznetgio_vm_accounts_response.json.results
+          | default(biznetgio_vm_accounts_response.json.accounts
+          | default(biznetgio_vm_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_accounts_response.json | default([]))
+      }}
+
+- name: Resolve existing Biznet Gio NEO Lite VM by vm_name
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | selectattr('vm_name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Resolve existing Biznet Gio NEO Lite VM by name
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | selectattr('name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when: biznetgio_vm_existing | length == 0
+
+- name: Resolve existing Biznet Gio NEO Lite VM by hostname
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | selectattr('hostname', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when: biznetgio_vm_existing | length == 0
+
+- name: Initialize Biznet Gio NEO Lite create body
+  ansible.builtin.set_fact:
+    biznetgio_vm_create_body:
+      product_id: "{{ biznetgio_vm.product_id | int }}"
+      cycle: "{{ biznetgio_vm.cycle }}"
+      select_os: "{{ biznetgio_vm.select_os }}"
+      keypair_id: "{{ biznetgio_vm.keypair_id | int }}"
+      vm_name: "{{ biznetgio_vm_name }}"
+      ssh_and_console_user: "{{ biznetgio_vm.ssh_and_console_user }}"
+      console_password: "{{ biznetgio_vm.console_password }}"
+  no_log: true
+
+- name: Add optional Biznet Gio NEO Lite create fields
+  ansible.builtin.set_fact:
+    biznetgio_vm_create_body: "{{ biznetgio_vm_create_body | combine({ item: biznetgio_vm[item] }) }}"
+  loop:
+    - description
+    - promocode
+    - pay_invoice_with_cc
+  when: biznetgio_vm[item] is defined
+  no_log: true
+
+- name: Create Biznet Gio NEO Lite VM
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites"
+    method: POST
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+      content-type: application/json
+    body_format: json
+    body: "{{ biznetgio_vm_create_body }}"
+    return_content: true
+    timeout: "{{ biznetgio_vm_create_timeout }}"
+    status_code:
+      - 200
+      - 201
+      - 202
+      - 400
+      - 401
+      - 403
+      - 404
+      - 409
+      - 422
+      - 500
+  register: biznetgio_vm_create_response
+  changed_when: biznetgio_vm_create_response.status in biznetgio_vm_create_success_statuses
+  failed_when: false
+  when: biznetgio_vm_existing | length == 0
+  no_log: true
+
+- name: Build Biznet Gio NEO Lite create rejection detail
+  ansible.builtin.set_fact:
+    biznetgio_vm_create_error_status: "{{ biznetgio_vm_create_response.status | default('unknown') }}"
+    biznetgio_vm_create_error_response: >-
+      {%- set response_json = biznetgio_vm_create_response.json | default({}) -%}
+      {%- if response_json is mapping -%}
+      {{ response_json.detail | default(response_json.message | default(response_json.error | default(response_json.errors | default(response_json | to_json)))) }}
+      {%- elif response_json -%}
+      {{ response_json | to_json }}
+      {%- elif biznetgio_vm_create_response.content | default('') | length > 0 -%}
+      {{ biznetgio_vm_create_response.content }}
+      {%- elif biznetgio_vm_create_response.msg | default('') | length > 0 -%}
+      {{ biznetgio_vm_create_response.msg }}
+      {%- else -%}
+      empty provider response
+      {%- endif -%}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_create_response is defined
+    - biznetgio_vm_create_response.status not in biznetgio_vm_create_success_statuses
+
+- name: Fail when Biznet Gio NEO Lite VM creation request is rejected
+  ansible.builtin.fail:
+    msg: >-
+      Biznet Gio NEO Lite VM creation request was rejected
+      (status={{ biznetgio_vm_create_error_status | default(biznetgio_vm_create_response.status | default('unknown')) }},
+      path=/neolites,
+      vm_name={{ biznetgio_vm_name }}).
+      Provider response: {{ biznetgio_vm_create_error_response | default('empty provider response') }}.
+      Create request timeout: {{ biznetgio_vm_create_timeout }} seconds.
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_create_response.status not in biznetgio_vm_create_success_statuses
+
+- name: Normalize Biznet Gio NEO Lite create response
+  ansible.builtin.set_fact:
+    biznetgio_vm_create_payload: >-
+      {{
+        (
+          biznetgio_vm_create_response.json.data
+          | default(biznetgio_vm_create_response.json.result
+          | default(biznetgio_vm_create_response.json.account
+          | default(biznetgio_vm_create_response.json)))
+        )
+        if (biznetgio_vm_existing | length == 0 and (biznetgio_vm_create_response.json | default({})) is mapping)
+        else ({})
+      }}
+
+- name: Set Biznet Gio NEO Lite account ID from provider response
+  ansible.builtin.set_fact:
+    biznetgio_vm_account_id: >-
+      {{
+        biznetgio_vm_existing.account_id
+        | default(biznetgio_vm_existing.id
+        | default(biznetgio_vm_existing.service_id
+        | default(biznetgio_vm_existing.account.id
+        | default(biznetgio_vm_create_payload.account_id
+        | default(biznetgio_vm_create_payload.id
+        | default(biznetgio_vm_create_payload.service_id
+        | default(biznetgio_vm_create_payload.account.id | default(''))))))))
+      }}
+
+- name: Wait for Biznet Gio NEO Lite account to appear
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/accounts"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: biznetgio_vm_wait_accounts_response
+  until: >-
+    (
+      (
+        (
+          biznetgio_vm_wait_accounts_response.json.data
+          | default(biznetgio_vm_wait_accounts_response.json.items
+          | default(biznetgio_vm_wait_accounts_response.json.results
+          | default(biznetgio_vm_wait_accounts_response.json.accounts
+          | default(biznetgio_vm_wait_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_wait_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_wait_accounts_response.json | default([]))
+      )
+      | selectattr('vm_name', 'equalto', biznetgio_vm_name)
+      | list
+      | length
+    ) > 0
+    or
+    (
+      (
+        (
+          biznetgio_vm_wait_accounts_response.json.data
+          | default(biznetgio_vm_wait_accounts_response.json.items
+          | default(biznetgio_vm_wait_accounts_response.json.results
+          | default(biznetgio_vm_wait_accounts_response.json.accounts
+          | default(biznetgio_vm_wait_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_wait_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_wait_accounts_response.json | default([]))
+      )
+      | selectattr('name', 'equalto', biznetgio_vm_name)
+      | list
+      | length
+    ) > 0
+    or
+    (
+      (
+        (
+          biznetgio_vm_wait_accounts_response.json.data
+          | default(biznetgio_vm_wait_accounts_response.json.items
+          | default(biznetgio_vm_wait_accounts_response.json.results
+          | default(biznetgio_vm_wait_accounts_response.json.accounts
+          | default(biznetgio_vm_wait_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_wait_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_wait_accounts_response.json | default([]))
+      )
+      | selectattr('hostname', 'equalto', biznetgio_vm_name)
+      | list
+      | length
+    ) > 0
+  retries: "{{ biznetgio_vm_wait_retries }}"
+  delay: "{{ biznetgio_vm_wait_delay }}"
+  failed_when: false
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_account_id | string | length == 0
+  no_log: true
+
+- name: Normalize Biznet Gio NEO Lite waited account list
+  ansible.builtin.set_fact:
+    biznetgio_vm_wait_accounts_list: >-
+      {{
+        (
+          biznetgio_vm_wait_accounts_response.json.data
+          | default(biznetgio_vm_wait_accounts_response.json.items
+          | default(biznetgio_vm_wait_accounts_response.json.results
+          | default(biznetgio_vm_wait_accounts_response.json.accounts
+          | default(biznetgio_vm_wait_accounts_response.json.neolites
+          | default([])))))
+        )
+        if (biznetgio_vm_wait_accounts_response.json | default({})) is mapping
+        else (biznetgio_vm_wait_accounts_response.json | default([]))
+      }}
+  when:
+    - biznetgio_vm_wait_accounts_response is defined
+    - biznetgio_vm_account_id | string | length == 0
+
+- name: Resolve created Biznet Gio NEO Lite account by vm_name
+  ansible.builtin.set_fact:
+    biznetgio_vm_created_account: >-
+      {{
+        (
+          biznetgio_vm_wait_accounts_list
+          | default([])
+          | selectattr('vm_name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when: biznetgio_vm_account_id | string | length == 0
+
+- name: Resolve created Biznet Gio NEO Lite account by name
+  ansible.builtin.set_fact:
+    biznetgio_vm_created_account: >-
+      {{
+        (
+          biznetgio_vm_wait_accounts_list
+          | default([])
+          | selectattr('name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_created_account | default({}) | length == 0
+
+- name: Resolve created Biznet Gio NEO Lite account by hostname
+  ansible.builtin.set_fact:
+    biznetgio_vm_created_account: >-
+      {{
+        (
+          biznetgio_vm_wait_accounts_list
+          | default([])
+          | selectattr('hostname', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_created_account | default({}) | length == 0
+
+- name: Set Biznet Gio NEO Lite account ID from account lookup
+  ansible.builtin.set_fact:
+    biznetgio_vm_account_id: >-
+      {{
+        biznetgio_vm_created_account.account_id
+        | default(biznetgio_vm_created_account.id
+        | default(biznetgio_vm_created_account.service_id
+        | default(biznetgio_vm_created_account.account.id | default(''))))
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_created_account | default({}) | length > 0
+
+- name: Fail when Biznet Gio NEO Lite account ID cannot be resolved
+  ansible.builtin.fail:
+    msg: "Biznet Gio NEO Lite VM {{ biznetgio_vm_name }} was created or already exists, but no account_id/id was returned or visible in {{ biznetgio_vm_wait_timeout }} seconds."
+  when: biznetgio_vm_account_id | string | length == 0
+
+- name: Get Biznet Gio NEO Lite VM details
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/accounts/{{ biznetgio_vm_account_id }}/vm-details"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 202
+      - 404
+      - 409
+      - 422
+      - 500
+  register: biznetgio_vm_details_response
+  changed_when: false
+  failed_when: false
+  until: biznetgio_vm_details_response.status | default(0) | int in [200, 202]
+  retries: "{{ biznetgio_vm_wait_retries }}"
+  delay: "{{ biznetgio_vm_wait_delay }}"
+  no_log: true
+
+- name: Normalize Biznet Gio NEO Lite VM details
+  ansible.builtin.set_fact:
+    biznetgio_vm_details_payload: >-
+      {{
+        (
+          biznetgio_vm_details_response.json.data
+          | default(biznetgio_vm_details_response.json.result
+          | default(biznetgio_vm_details_response.json.vm
+          | default(biznetgio_vm_details_response.json)))
+        )
+        if ((biznetgio_vm_details_response.json | default({})) is mapping and (biznetgio_vm_details_response.status | default(0) | int in [200, 202]))
+        else ({})
+      }}
+
+- name: Build Biznet Gio NEO Lite VM output
+  ansible.builtin.set_fact:
+    biznetgio_vm_result: >-
+      {{
+        (biznetgio_vm_existing | default({}))
+        | combine(biznetgio_vm_create_payload | default({}), recursive=True)
+        | combine(biznetgio_vm_created_account | default({}), recursive=True)
+        | combine(biznetgio_vm_details_payload | default({}), recursive=True)
+        | combine(
+            {
+              'id': biznetgio_vm_account_id | string,
+              'account_id': biznetgio_vm_account_id | string,
+              'name': biznetgio_vm_name,
+              'vm_name': biznetgio_vm_name,
+              'provider': 'biznetgio'
+            },
+            recursive=True
+          )
+      }}
+
+- name: Resolve Biznet Gio NEO Lite VM IP output
+  ansible.builtin.set_fact:
+    biznetgio_vm_public_ip: >-
+      {{
+        biznetgio_vm_result.public_ip
+        | default(biznetgio_vm_result.public_ipv4
+        | default(biznetgio_vm_result.public_ip_address
+        | default(biznetgio_vm_result.ip_address
+        | default(biznetgio_vm_result.ip
+        | default(biznetgio_vm_result.ipv4
+        | default(biznetgio_vm_result.address | default('')))))))
+      }}
+    biznetgio_vm_private_ip: >-
+      {{
+        biznetgio_vm_result.private_ip
+        | default(biznetgio_vm_result.private_ipv4
+        | default(biznetgio_vm_result.private_ip_address
+        | default(biznetgio_vm_result.internal_ip
+        | default(biznetgio_vm_result.local_ip | default('')))))
+      }}
+
+- name: Enrich Biznet Gio NEO Lite VM output with IP aliases
+  ansible.builtin.set_fact:
+    biznetgio_vm_result: >-
+      {{
+        biznetgio_vm_result
+        | combine(
+            {
+              'public_ip': biznetgio_vm_public_ip,
+              'public_ipv4': biznetgio_vm_public_ip,
+              'private_ip': biznetgio_vm_private_ip,
+              'private_ipv4': biznetgio_vm_private_ip
+            },
+            recursive=True
+          )
+      }}
+
+- name: Set Biznet Gio NEO Lite VM output
+  ansible.builtin.set_fact:
+    output_biznetgio_vm: "{{ output_biznetgio_vm | default({}) | combine({ biznetgio_vm_name: biznetgio_vm_result }, recursive=True) }}"
+    output_vm: "{{ output_vm | default({}) | combine({ biznetgio_vm_name: biznetgio_vm_result }, recursive=True) }}"
+  when: with_output is defined and with_output

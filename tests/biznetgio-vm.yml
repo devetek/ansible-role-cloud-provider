@@ -1,0 +1,27 @@
+---
+- name: Syntax check Biznet Gio NEO Lite VM role path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    state: present
+    with_output: true
+    cloud_provider: biznetgio
+    cloud_provider_auth:
+      token: test-token
+      api_url: https://api.portal.biznetgio.com
+    cloud_provider_resource_type:
+      - vm
+    cloud_provider_resource_detail:
+      vm:
+        product_id: 1001
+        cycle: m
+        select_os: Rocky-8
+        keypair_id: 321
+        vm_name: dpanel-bg01
+        description: dPanel syntax test
+        ssh_and_console_user: dpanel
+        console_password: Password1234
+        pay_invoice_with_cc: "no"
+        reserve_public_ip: true
+  roles:
+    - role: ansible-role-cloud-provider

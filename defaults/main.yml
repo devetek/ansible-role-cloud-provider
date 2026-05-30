@@ -1,6 +1,6 @@
 ---
 # provider auth information
-cloud_provider: "gcp" # gcp | idcloudhost
+cloud_provider: "gcp" # gcp | idcloudhost | biznetgio
 cloud_provider_auth: {}
 
 # resource type creation
@@ -19,3 +19,9 @@ idcloudhost_vm_default_wait_delay: 10
 # before failing the task.
 idcloudhost_vm_default_reconcile_timeout: 1800
 idcloudhost_vm_default_reconcile_delay: 10
+
+# Biznet Gio NEO Lite create requests can take time before the account and VM
+# details are visible through the portal API.
+biznetgio_vm_default_create_timeout: 120
+biznetgio_vm_default_wait_timeout: 1800
+biznetgio_vm_default_wait_delay: 10

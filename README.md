@@ -179,6 +179,59 @@ seconds before failing. If the VM is found, the role continues with the provider
 VM output instead of treating the create response as fatal. Authentication and
 authorization failures are not retried.
 
+### Biznet Gio NEO Lite VM example
+
+```yaml
+---
+- name: Create a Biznet Gio NEO Lite VM
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "biznetgio"
+    cloud_provider_resource_type:
+      - "vm"
+    cloud_provider_auth:
+      token: "{{ biznetgio_api_token }}"
+      # Optional. Defaults to https://api.portal.biznetgio.com and the role
+      # normalizes it to the /v1 API root.
+      api_url: "https://api.portal.biznetgio.com"
+    cloud_provider_resource_detail:
+      vm:
+        product_id: 1001
+        cycle: "m"
+        select_os: "Rocky-8"
+        keypair_id: 321
+        vm_name: "dpanel-bg01"
+        description: "dPanel managed NEO Lite VM"
+        ssh_and_console_user: "dpanel"
+        console_password: "{{ biznetgio_console_password }}"
+        promocode: ""
+        pay_invoice_with_cc: "no"
+        reserve_public_ip: true
+        # Optional. The role waits up to 30 minutes by default for the NEO Lite
+        # account and VM detail endpoints to expose the created VM.
+        wait_timeout: 1800
+        wait_delay: 10
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The role sends Biznet Gio authentication as the `x-token` header and calls
+`POST /v1/neolites` for creation. It writes VM creation output to
+`output_biznetgio_vm` and `output_vm` when `with_output: true`. Each output item
+is keyed by `vm_name` and includes `id`/`account_id` when the provider returns
+or exposes the NEO Lite account reference. The role also queries
+`/v1/neolites/accounts/{account_id}/vm-details` and normalizes common IP fields
+to `public_ip`/`public_ipv4` and `private_ip`/`private_ipv4` for dPanel setup.
+
+Deletion uses the same role with `state: absent` and calls
+`DELETE /v1/neolites/{account_id}`. dPanel should pass the recorded provider
+instance reference as `cloud_provider_resource_detail.vm.account_id`; if only
+`vm_name` is available, the role tries to resolve the account first.
+
 License
 -------
 
