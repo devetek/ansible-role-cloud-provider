@@ -122,6 +122,23 @@
     - biznetgio_vm_account_id | string | length == 0
     - biznetgio_vm_existing | default({}) | length == 0
 
+- name: Resolve Biznet Gio NEO Lite VM to delete by nested extra_details name
+  ansible.builtin.set_fact:
+    biznetgio_vm_existing: >-
+      {{
+        (
+          biznetgio_vm_accounts_list
+          | default([])
+          | selectattr('extra_details.name', 'equalto', biznetgio_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - biznetgio_vm_account_id | string | length == 0
+    - biznetgio_vm_existing | default({}) | length == 0
+
 - name: Set Biznet Gio NEO Lite account ID from deletion lookup
   ansible.builtin.set_fact:
     biznetgio_vm_account_id: >-
