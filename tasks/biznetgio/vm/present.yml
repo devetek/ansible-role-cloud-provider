@@ -20,7 +20,10 @@
     biznetgio_vm: "{{ cloud_provider_resource_detail.vm }}"
     biznetgio_vm_name: "{{ cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name) }}"
     biznetgio_vm_public_key: "{{ cloud_provider_resource_detail.vm.public_key | default((cloud_provider_resource_detail.vm.public_keys | default([''])) | first) }}"
-    biznetgio_vm_keypair_name: "{{ cloud_provider_resource_detail.vm.keypair_name | default('dpanel-' ~ (cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name))) }}"
+    biznetgio_vm_dpanel_ssh_key_id: "{{ cloud_provider_resource_detail.vm.dpanel_ssh_key_id | default(cloud_provider_resource_detail.vm.ssh_key_id | default(cloud_provider_resource_detail.vm.secret_id | default(''))) | string | trim }}"
+    biznetgio_vm_keypair_name: >-
+      {%- set dpanel_key_id = cloud_provider_resource_detail.vm.dpanel_ssh_key_id | default(cloud_provider_resource_detail.vm.ssh_key_id | default(cloud_provider_resource_detail.vm.secret_id | default(''))) | string | trim -%}
+      {{ cloud_provider_resource_detail.vm.keypair_name | default(('dpanel-kid-' ~ dpanel_key_id) if dpanel_key_id | length > 0 else ('dpanel-' ~ (cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name)))) }}
     biznetgio_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(biznetgio_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
     biznetgio_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(biznetgio_vm_default_wait_delay | default(10))) | int, 1] | max }}"
     biznetgio_vm_create_timeout: "{{ [cloud_provider_resource_detail.vm.create_timeout | default(cloud_provider_auth.vm_create_timeout | default(biznetgio_vm_default_create_timeout | default(120))) | int, 1] | max }}"
@@ -187,6 +190,32 @@
     - biznetgio_vm_existing | length == 0
     - biznetgio_vm_keypair_id | string | length == 0
 
+- name: Resolve Biznet Gio NEO Lite keypair by dPanel SSH key name
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_existing: "{{ biznetgio_vm_keypair_item }}"
+  loop: "{{ biznetgio_vm_keypairs_list | default([]) }}"
+  loop_control:
+    loop_var: biznetgio_vm_keypair_item
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_existing | default({}) | length == 0
+    - >
+      (
+        (biznetgio_vm_keypair_item.name | default(biznetgio_vm_keypair_item.keypair_name | default(biznetgio_vm_keypair_item.label | default(''))) | string | trim)
+        == (biznetgio_vm_keypair_name | string | trim)
+      )
+      or
+      (
+        biznetgio_vm_dpanel_ssh_key_id | string | trim | length > 0
+        and
+        (
+          (biznetgio_vm_keypair_item.name | default(biznetgio_vm_keypair_item.keypair_name | default(biznetgio_vm_keypair_item.label | default(''))) | string | trim)
+          is search('dpanel-kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
+        )
+      )
+  no_log: true
+
 - name: Resolve Biznet Gio NEO Lite keypair by dPanel public key
   ansible.builtin.set_fact:
     biznetgio_vm_keypair_existing: "{{ biznetgio_vm_keypair_item }}"
@@ -331,6 +360,32 @@
   when:
     - biznetgio_vm_existing | length == 0
     - biznetgio_vm_keypair_id | string | length == 0
+
+- name: Resolve refreshed Biznet Gio NEO Lite keypair by dPanel SSH key name
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_refreshed: "{{ biznetgio_vm_keypair_refresh_item }}"
+  loop: "{{ biznetgio_vm_keypairs_refresh_list | default([]) }}"
+  loop_control:
+    loop_var: biznetgio_vm_keypair_refresh_item
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_refreshed | default({}) | length == 0
+    - >
+      (
+        (biznetgio_vm_keypair_refresh_item.name | default(biznetgio_vm_keypair_refresh_item.keypair_name | default(biznetgio_vm_keypair_refresh_item.label | default(''))) | string | trim)
+        == (biznetgio_vm_keypair_name | string | trim)
+      )
+      or
+      (
+        biznetgio_vm_dpanel_ssh_key_id | string | trim | length > 0
+        and
+        (
+          (biznetgio_vm_keypair_refresh_item.name | default(biznetgio_vm_keypair_refresh_item.keypair_name | default(biznetgio_vm_keypair_refresh_item.label | default(''))) | string | trim)
+          is search('dpanel-kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
+        )
+      )
+  no_log: true
 
 - name: Resolve refreshed Biznet Gio NEO Lite keypair by dPanel public key
   ansible.builtin.set_fact:
