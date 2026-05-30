@@ -202,7 +202,12 @@ authorization failures are not retried.
         product_id: 1001
         cycle: "m"
         select_os: "Rocky-8"
-        keypair_id: 321
+        # dPanel passes the selected SSH secret public key here. Biznet Gio's
+        # create API still requires keypair_id, so the role imports or reuses
+        # this public key as a NEO Lite keypair before creating the VM.
+        public_key: "{{ dpanel_ssh_public_key }}"
+        # Optional. Defaults to dpanel-<vm_name>.
+        keypair_name: "dpanel-bg01"
         vm_name: "dpanel-bg01"
         description: "dPanel managed NEO Lite VM"
         ssh_and_console_user: "dpanel"
@@ -219,7 +224,11 @@ authorization failures are not retried.
     - role: dpanel.cloud-provider
 ```
 
-The role sends Biznet Gio authentication as the `x-token` header and calls
+The role sends Biznet Gio authentication as the `x-token` header. When
+`vm.keypair_id` is omitted, it lists existing NEO Lite keypairs, reuses one with
+the same public key, or imports `vm.public_key` through
+`POST /v1/neolites/keypairs/import`; this lets dPanel keep its own SSH secret as
+the source of truth. After resolving a provider `keypair_id`, the role calls
 `POST /v1/neolites` for creation. It writes VM creation output to
 `output_biznetgio_vm` and `output_vm` when `with_output: true`. Each output item
 is keyed by `vm_name` and includes `id`/`account_id` when the provider returns

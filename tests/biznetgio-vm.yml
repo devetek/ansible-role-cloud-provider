@@ -16,8 +16,9 @@
         product_id: 1001
         cycle: m
         select_os: Rocky-8
-        keypair_id: 321
+        public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDpanelSyntaxTest dpanel@example
         vm_name: dpanel-bg01
+        keypair_name: dpanel-bg01
         description: dPanel syntax test
         ssh_and_console_user: dpanel
         console_password: Password1234

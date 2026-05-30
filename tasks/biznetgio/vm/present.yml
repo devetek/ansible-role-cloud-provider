@@ -7,11 +7,11 @@
       - cloud_provider_resource_detail.vm.product_id is defined
       - cloud_provider_resource_detail.vm.cycle is defined
       - cloud_provider_resource_detail.vm.select_os is defined
-      - cloud_provider_resource_detail.vm.keypair_id is defined
+      - cloud_provider_resource_detail.vm.keypair_id is defined or cloud_provider_resource_detail.vm.public_key | default('') | length > 0 or cloud_provider_resource_detail.vm.public_keys | default([]) | length > 0
       - cloud_provider_resource_detail.vm.ssh_and_console_user is defined
       - cloud_provider_resource_detail.vm.console_password is defined
       - cloud_provider_resource_detail.vm.vm_name is defined or cloud_provider_resource_detail.vm.name is defined
-    fail_msg: "Biznet Gio NEO Lite VM creation requires auth.token and vm product_id, cycle, select_os, keypair_id, vm_name, ssh_and_console_user, and console_password."
+    fail_msg: "Biznet Gio NEO Lite VM creation requires auth.token, vm product_id, cycle, select_os, vm_name, ssh_and_console_user, console_password, and either vm.keypair_id or a dPanel SSH public key."
 
 - name: Set Biznet Gio NEO Lite VM variables
   ansible.builtin.set_fact:
@@ -19,6 +19,8 @@
     biznetgio_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.x_token | default(cloud_provider_auth.api_token)) }}"
     biznetgio_vm: "{{ cloud_provider_resource_detail.vm }}"
     biznetgio_vm_name: "{{ cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name) }}"
+    biznetgio_vm_public_key: "{{ cloud_provider_resource_detail.vm.public_key | default((cloud_provider_resource_detail.vm.public_keys | default([''])) | first) }}"
+    biznetgio_vm_keypair_name: "{{ cloud_provider_resource_detail.vm.keypair_name | default('dpanel-' ~ (cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name))) }}"
     biznetgio_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(biznetgio_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
     biznetgio_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(biznetgio_vm_default_wait_delay | default(10))) | int, 1] | max }}"
     biznetgio_vm_create_timeout: "{{ [cloud_provider_resource_detail.vm.create_timeout | default(cloud_provider_auth.vm_create_timeout | default(biznetgio_vm_default_create_timeout | default(120))) | int, 1] | max }}"
@@ -137,16 +139,237 @@
       }}
   when: biznetgio_vm_existing | length == 0
 
+- name: Set Biznet Gio NEO Lite keypair ID from request
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_id: "{{ biznetgio_vm.keypair_id | default('') }}"
+  no_log: true
+
+- name: List Biznet Gio NEO Lite keypairs for dPanel public key
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/keypairs/"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: biznetgio_vm_keypairs_response
+  changed_when: false
+  failed_when: false
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+  no_log: true
+
+- name: Normalize Biznet Gio NEO Lite keypair list
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypairs_list: >-
+      {{
+        (
+          biznetgio_vm_keypairs_response.json.data
+          | default(biznetgio_vm_keypairs_response.json.items
+          | default(biznetgio_vm_keypairs_response.json.results
+          | default(biznetgio_vm_keypairs_response.json.keypairs
+          | default(biznetgio_vm_keypairs_response.json.key_pairs
+          | default([])))))
+        )
+        if (biznetgio_vm_keypairs_response.json | default({})) is mapping
+        else (biznetgio_vm_keypairs_response.json | default([]))
+      }}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+
+- name: Initialize Biznet Gio NEO Lite dPanel keypair lookup
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_existing: {}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+
+- name: Resolve Biznet Gio NEO Lite keypair by dPanel public key
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_existing: "{{ biznetgio_vm_keypair_item }}"
+  loop: "{{ biznetgio_vm_keypairs_list | default([]) }}"
+  loop_control:
+    loop_var: biznetgio_vm_keypair_item
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_existing | default({}) | length == 0
+    - biznetgio_vm_keypair_item.public_key | default('') | trim == biznetgio_vm_public_key | trim
+  no_log: true
+
+- name: Set Biznet Gio NEO Lite keypair ID from existing dPanel public key
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_id: "{{ biznetgio_vm_keypair_existing.keypair_id | default(biznetgio_vm_keypair_existing.id | default('')) }}"
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_existing | default({}) | length > 0
+  no_log: true
+
+- name: Import dPanel public key into Biznet Gio NEO Lite keypairs
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/keypairs/import"
+    method: POST
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+      content-type: application/json
+    body_format: json
+    body:
+      name: "{{ biznetgio_vm_keypair_name }}"
+      public_key: "{{ biznetgio_vm_public_key }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+      - 202
+      - 400
+      - 401
+      - 403
+      - 409
+      - 422
+      - 500
+  register: biznetgio_vm_keypair_import_response
+  changed_when: biznetgio_vm_keypair_import_response.status in [200, 201, 202]
+  failed_when: false
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+  no_log: true
+
+- name: Fail when Biznet Gio NEO Lite dPanel public key import fails
+  ansible.builtin.fail:
+    msg: >-
+      Biznet Gio NEO Lite keypair import failed
+      (status={{ biznetgio_vm_keypair_import_response.status | default('unknown') }},
+      path=/neolites/keypairs/import,
+      name={{ biznetgio_vm_keypair_name }}).
+      Provider response: {{
+        biznetgio_vm_keypair_import_response.json.detail
+        | default(biznetgio_vm_keypair_import_response.json.message
+        | default(biznetgio_vm_keypair_import_response.json.error
+        | default(biznetgio_vm_keypair_import_response.json.errors
+        | default(biznetgio_vm_keypair_import_response.content
+        | default(biznetgio_vm_keypair_import_response.msg | default('empty provider response'))))))
+      }}.
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_import_response is defined
+    - biznetgio_vm_keypair_import_response.status not in [200, 201, 202]
+
+- name: Normalize Biznet Gio NEO Lite imported keypair response
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_import_payload: >-
+      {{
+        (
+          biznetgio_vm_keypair_import_response.json.data
+          | default(biznetgio_vm_keypair_import_response.json.result
+          | default(biznetgio_vm_keypair_import_response.json.keypair
+          | default(biznetgio_vm_keypair_import_response.json)))
+        )
+        if ((biznetgio_vm_keypair_import_response.json | default({})) is mapping and (biznetgio_vm_keypair_import_response.status | default(0) | int in [200, 201, 202]))
+        else ({})
+      }}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_import_response is defined
+    - biznetgio_vm_keypair_import_response.status in [200, 201, 202]
+  no_log: true
+
+- name: Set Biznet Gio NEO Lite keypair ID from import response
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_id: "{{ biznetgio_vm_keypair_import_payload.keypair_id | default(biznetgio_vm_keypair_import_payload.id | default('')) }}"
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_import_payload | default({}) | length > 0
+  no_log: true
+
+- name: Refresh Biznet Gio NEO Lite keypairs after dPanel public key import
+  ansible.builtin.uri:
+    url: "{{ biznetgio_api_base_url }}/neolites/keypairs/"
+    method: GET
+    headers:
+      x-token: "{{ biznetgio_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: biznetgio_vm_keypairs_refresh_response
+  changed_when: false
+  failed_when: false
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+  no_log: true
+
+- name: Normalize refreshed Biznet Gio NEO Lite keypair list
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypairs_refresh_list: >-
+      {{
+        (
+          biznetgio_vm_keypairs_refresh_response.json.data
+          | default(biznetgio_vm_keypairs_refresh_response.json.items
+          | default(biznetgio_vm_keypairs_refresh_response.json.results
+          | default(biznetgio_vm_keypairs_refresh_response.json.keypairs
+          | default(biznetgio_vm_keypairs_refresh_response.json.key_pairs
+          | default([])))))
+        )
+        if (biznetgio_vm_keypairs_refresh_response.json | default({})) is mapping
+        else (biznetgio_vm_keypairs_refresh_response.json | default([]))
+      }}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+
+- name: Initialize refreshed Biznet Gio NEO Lite dPanel keypair lookup
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_refreshed: {}
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+
+- name: Resolve refreshed Biznet Gio NEO Lite keypair by dPanel public key
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_refreshed: "{{ biznetgio_vm_keypair_refresh_item }}"
+  loop: "{{ biznetgio_vm_keypairs_refresh_list | default([]) }}"
+  loop_control:
+    loop_var: biznetgio_vm_keypair_refresh_item
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_refreshed | default({}) | length == 0
+    - biznetgio_vm_keypair_refresh_item.public_key | default('') | trim == biznetgio_vm_public_key | trim
+  no_log: true
+
+- name: Set Biznet Gio NEO Lite keypair ID from refreshed dPanel public key
+  ansible.builtin.set_fact:
+    biznetgio_vm_keypair_id: "{{ biznetgio_vm_keypair_refreshed.keypair_id | default(biznetgio_vm_keypair_refreshed.id | default('')) }}"
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+    - biznetgio_vm_keypair_refreshed | default({}) | length > 0
+  no_log: true
+
+- name: Fail when Biznet Gio NEO Lite keypair ID cannot be resolved
+  ansible.builtin.fail:
+    msg: "Biznet Gio NEO Lite VM {{ biznetgio_vm_name }} could not resolve a keypair_id from the selected dPanel SSH key."
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm_keypair_id | string | length == 0
+
 - name: Initialize Biznet Gio NEO Lite create body
   ansible.builtin.set_fact:
     biznetgio_vm_create_body:
       product_id: "{{ biznetgio_vm.product_id | int }}"
       cycle: "{{ biznetgio_vm.cycle }}"
       select_os: "{{ biznetgio_vm.select_os }}"
-      keypair_id: "{{ biznetgio_vm.keypair_id | int }}"
+      keypair_id: "{{ biznetgio_vm_keypair_id | int }}"
       vm_name: "{{ biznetgio_vm_name }}"
       ssh_and_console_user: "{{ biznetgio_vm.ssh_and_console_user }}"
       console_password: "{{ biznetgio_vm.console_password }}"
+  when: biznetgio_vm_existing | length == 0
   no_log: true
 
 - name: Add optional Biznet Gio NEO Lite create fields
@@ -158,7 +381,9 @@
     - pay_invoice_with_cc
   loop_control:
     loop_var: biznetgio_vm_optional_field
-  when: biznetgio_vm[biznetgio_vm_optional_field] is defined
+  when:
+    - biznetgio_vm_existing | length == 0
+    - biznetgio_vm[biznetgio_vm_optional_field] is defined
   no_log: true
 
 - name: Create Biznet Gio NEO Lite VM
