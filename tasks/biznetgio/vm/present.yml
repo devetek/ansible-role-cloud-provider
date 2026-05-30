@@ -21,9 +21,11 @@
     biznetgio_vm_name: "{{ cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name) }}"
     biznetgio_vm_public_key: "{{ cloud_provider_resource_detail.vm.public_key | default((cloud_provider_resource_detail.vm.public_keys | default([''])) | first) }}"
     biznetgio_vm_dpanel_ssh_key_id: "{{ cloud_provider_resource_detail.vm.dpanel_ssh_key_id | default(cloud_provider_resource_detail.vm.ssh_key_id | default(cloud_provider_resource_detail.vm.secret_id | default(''))) | string | trim }}"
+    biznetgio_vm_dpanel_runtime_env: "{{ cloud_provider_resource_detail.vm.dpanel_runtime_env | default(cloud_provider_auth.dpanel_runtime_env | default(cloud_provider_auth.runtime_env | default(''))) | string | trim | lower }}"
     biznetgio_vm_keypair_name: >-
       {%- set dpanel_key_id = cloud_provider_resource_detail.vm.dpanel_ssh_key_id | default(cloud_provider_resource_detail.vm.ssh_key_id | default(cloud_provider_resource_detail.vm.secret_id | default(''))) | string | trim -%}
-      {{ cloud_provider_resource_detail.vm.keypair_name | default(('dpanel-kid-' ~ dpanel_key_id) if dpanel_key_id | length > 0 else ('dpanel-' ~ (cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name)))) }}
+      {%- set runtime_env = cloud_provider_resource_detail.vm.dpanel_runtime_env | default(cloud_provider_auth.dpanel_runtime_env | default(cloud_provider_auth.runtime_env | default(''))) | string | trim | lower -%}
+      {{ cloud_provider_resource_detail.vm.keypair_name | default(('dpanel-' ~ runtime_env ~ '-kid-' ~ dpanel_key_id) if (dpanel_key_id | length > 0 and runtime_env | length > 0) else (('dpanel-kid-' ~ dpanel_key_id) if dpanel_key_id | length > 0 else ('dpanel-' ~ (cloud_provider_resource_detail.vm.vm_name | default(cloud_provider_resource_detail.vm.name))))) }}
     biznetgio_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(biznetgio_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
     biznetgio_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(biznetgio_vm_default_wait_delay | default(10))) | int, 1] | max }}"
     biznetgio_vm_create_timeout: "{{ [cloud_provider_resource_detail.vm.create_timeout | default(cloud_provider_auth.vm_create_timeout | default(biznetgio_vm_default_create_timeout | default(120))) | int, 1] | max }}"
@@ -208,10 +210,16 @@
       or
       (
         biznetgio_vm_dpanel_ssh_key_id | string | trim | length > 0
+        and biznetgio_vm_dpanel_runtime_env | string | trim | length > 0
         and
         (
           (biznetgio_vm_keypair_item.name | default(biznetgio_vm_keypair_item.keypair_name | default(biznetgio_vm_keypair_item.label | default(''))) | string | trim)
-          is search('dpanel-kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
+          is search('(^|[^a-z0-9])' ~ (biznetgio_vm_dpanel_runtime_env | string | trim) ~ '($|[^a-z0-9])')
+        )
+        and
+        (
+          (biznetgio_vm_keypair_item.name | default(biznetgio_vm_keypair_item.keypair_name | default(biznetgio_vm_keypair_item.label | default(''))) | string | trim)
+          is search('kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
         )
       )
   no_log: true
@@ -379,10 +387,16 @@
       or
       (
         biznetgio_vm_dpanel_ssh_key_id | string | trim | length > 0
+        and biznetgio_vm_dpanel_runtime_env | string | trim | length > 0
         and
         (
           (biznetgio_vm_keypair_refresh_item.name | default(biznetgio_vm_keypair_refresh_item.keypair_name | default(biznetgio_vm_keypair_refresh_item.label | default(''))) | string | trim)
-          is search('dpanel-kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
+          is search('(^|[^a-z0-9])' ~ (biznetgio_vm_dpanel_runtime_env | string | trim) ~ '($|[^a-z0-9])')
+        )
+        and
+        (
+          (biznetgio_vm_keypair_refresh_item.name | default(biznetgio_vm_keypair_refresh_item.keypair_name | default(biznetgio_vm_keypair_refresh_item.label | default(''))) | string | trim)
+          is search('kid-' ~ (biznetgio_vm_dpanel_ssh_key_id | string | trim) ~ '($|[^0-9])')
         )
       )
   no_log: true

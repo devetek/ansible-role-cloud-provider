@@ -18,8 +18,9 @@
         select_os: Rocky-8
         public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDpanelSyntaxTest dpanel@example
         dpanel_ssh_key_id: "44"
+        dpanel_runtime_env: development
         vm_name: dpanel-bg01
-        keypair_name: dpanel-kid-44
+        keypair_name: dpanel-development-kid-44
         description: dPanel syntax test
         ssh_and_console_user: dpanel
         console_password: Password1234

@@ -207,11 +207,12 @@ authorization failures are not retried.
         # this public key as a NEO Lite keypair before creating the VM.
         public_key: "{{ dpanel_ssh_public_key }}"
         # Optional but recommended from dPanel. The role checks for an existing
-        # Biznet Gio keypair named dpanel-kid-<id> before importing.
+        # Biznet Gio keypair named dpanel-<env>-kid-<id> before importing.
         dpanel_ssh_key_id: "44"
-        # Optional override. Defaults to dpanel-kid-<dpanel_ssh_key_id> when set,
-        # otherwise dpanel-<vm_name>.
-        keypair_name: "dpanel-kid-44"
+        dpanel_runtime_env: "development"
+        # Optional override. Defaults to dpanel-<dpanel_runtime_env>-kid-<dpanel_ssh_key_id>
+        # when both are set, otherwise dpanel-kid-<dpanel_ssh_key_id> or dpanel-<vm_name>.
+        keypair_name: "dpanel-development-kid-44"
         vm_name: "dpanel-bg01"
         description: "dPanel managed NEO Lite VM"
         ssh_and_console_user: "dpanel"
@@ -230,8 +231,9 @@ authorization failures are not retried.
 
 The role sends Biznet Gio authentication as the `x-token` header. When
 `vm.keypair_id` is omitted, it lists existing NEO Lite keypairs, first reuses one
-whose name matches the dPanel SSH key ID (`dpanel-kid-<id>`), then falls back to
-the same public key, or imports `vm.public_key` through
+whose name matches the dPanel runtime environment and SSH key ID
+(`dpanel-<env>-kid-<id>`), then falls back to the same public key, or imports
+`vm.public_key` through
 `POST /v1/neolites/keypairs/import`; this lets dPanel keep its own SSH secret as
 the source of truth. After resolving a provider `keypair_id`, the role calls
 `POST /v1/neolites` for creation. It writes VM creation output to
