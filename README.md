@@ -138,6 +138,10 @@ Example Playbook
         billing_account_id: 12345
         network_uuid: "50341410-9e88-4af2-a21e-b8c898e33e52"
         reserve_public_ip: true
+        # Optional. The role waits up to 30 minutes by default for async
+        # IDCloudHost VM creation to become visible in the VM list.
+        wait_timeout: 1800
+        wait_delay: 10
         cloud_init:
           package_update: true
 
@@ -149,6 +153,13 @@ The role writes VM creation output to `output_idcloudhost_vm` and `output_vm`
 when `with_output: true`. Each output item is keyed by VM name and includes the
 provider response, including the IDCloudHost `uuid` that dPanel can store as the
 provider instance reference.
+
+For IDCloudHost VM creation, the role treats a successful create request as
+asynchronous. It polls the IDCloudHost VM list until the new VM is visible by
+UUID or name, using `vm.wait_timeout`/`cloud_provider_auth.vm_wait_timeout`
+with a default of `1800` seconds and `vm.wait_delay`/`cloud_provider_auth.vm_wait_delay`
+with a default of `10` seconds. If the VM is still not visible when the timeout
+expires, the role fails the task.
 
 License
 -------
