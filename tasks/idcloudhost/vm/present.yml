@@ -20,6 +20,7 @@
     idcloudhost_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.apikey | default(cloud_provider_auth.api_key)) }}"
     idcloudhost_vm: "{{ cloud_provider_resource_detail.vm }}"
     idcloudhost_vm_region: "{{ cloud_provider_resource_detail.vm.region | default(cloud_provider_resource_detail.vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    idcloudhost_vm_create_timeout: "{{ [cloud_provider_resource_detail.vm.create_timeout | default(cloud_provider_auth.vm_create_timeout | default(idcloudhost_vm_default_create_timeout | default(120))) | int, 1] | max }}"
     idcloudhost_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(idcloudhost_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
     idcloudhost_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(idcloudhost_vm_default_wait_delay | default(10))) | int, 1] | max }}"
     idcloudhost_vm_reconcile_timeout: "{{ [cloud_provider_resource_detail.vm.reconcile_timeout | default(cloud_provider_auth.vm_reconcile_timeout | default(idcloudhost_vm_default_reconcile_timeout | default(1800))) | int, 1] | max }}"
@@ -33,6 +34,7 @@
       - 409
       - 422
       - 500
+      - -1
   no_log: true
 
 - name: Set IDCloudHost VM wait retries
@@ -129,6 +131,7 @@
     body_format: form-urlencoded
     body: "{{ idcloudhost_vm_create_body }}"
     return_content: true
+    timeout: "{{ idcloudhost_vm_create_timeout }}"
     status_code:
       - 200
       - 201
@@ -164,6 +167,8 @@
       {{ response_json | to_json }}
       {%- elif idcloudhost_vm_create_response.content | default('') | length > 0 -%}
       {{ idcloudhost_vm_create_response.content }}
+      {%- elif idcloudhost_vm_create_response.msg | default('') | length > 0 -%}
+      {{ idcloudhost_vm_create_response.msg }}
       {%- else -%}
       empty provider response
       {%- endif -%}
@@ -319,6 +324,7 @@
       region={{ idcloudhost_vm_region | default('') }},
       name={{ idcloudhost_vm.name }}).
       Provider response: {{ idcloudhost_vm_create_error_response | default('empty provider response') }}.
+      Create request timeout: {{ idcloudhost_vm_create_timeout }} seconds.
       Reconciliation: {{
         'no matching VM was visible in ' ~ idcloudhost_vm_reconcile_timeout ~ ' seconds'
         if idcloudhost_vm_create_response.status in idcloudhost_vm_create_reconcile_statuses

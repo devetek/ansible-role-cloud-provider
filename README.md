@@ -138,6 +138,8 @@ Example Playbook
         billing_account_id: 12345
         network_uuid: "50341410-9e88-4af2-a21e-b8c898e33e52"
         reserve_public_ip: true
+        # Optional. HTTP read timeout for the initial create request.
+        create_timeout: 120
         # Optional. The role waits up to 30 minutes by default for async
         # IDCloudHost VM creation to become visible in the VM list.
         wait_timeout: 1800
@@ -168,9 +170,11 @@ with a default of `1800` seconds and `vm.wait_delay`/`cloud_provider_auth.vm_wai
 with a default of `10` seconds. If the VM is still not visible when the timeout
 expires, the role fails the task.
 
-If IDCloudHost returns a retryable rejected create response (`400`, `409`,
-`422`, or `500`), the role also reconciles against the VM list by UUID or name
-for up to `vm.reconcile_timeout`/`cloud_provider_auth.vm_reconcile_timeout`
+The initial create request uses `vm.create_timeout`/`cloud_provider_auth.vm_create_timeout`
+with a default of `120` seconds. If IDCloudHost returns a retryable rejected
+create response (`400`, `409`, `422`, `500`) or Ansible reports `status=-1`
+after a transport timeout, the role also reconciles against the VM list by UUID
+or name for up to `vm.reconcile_timeout`/`cloud_provider_auth.vm_reconcile_timeout`
 seconds before failing. If the VM is found, the role continues with the provider
 VM output instead of treating the create response as fatal. Authentication and
 authorization failures are not retried.
