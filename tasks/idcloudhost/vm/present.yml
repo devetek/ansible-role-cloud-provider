@@ -22,11 +22,23 @@
     idcloudhost_vm_region: "{{ cloud_provider_resource_detail.vm.region | default(cloud_provider_resource_detail.vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
     idcloudhost_vm_wait_timeout: "{{ [cloud_provider_resource_detail.vm.wait_timeout | default(cloud_provider_auth.vm_wait_timeout | default(idcloudhost_vm_default_wait_timeout | default(1800))) | int, 1] | max }}"
     idcloudhost_vm_wait_delay: "{{ [cloud_provider_resource_detail.vm.wait_delay | default(cloud_provider_auth.vm_wait_delay | default(idcloudhost_vm_default_wait_delay | default(10))) | int, 1] | max }}"
+    idcloudhost_vm_reconcile_timeout: "{{ [cloud_provider_resource_detail.vm.reconcile_timeout | default(cloud_provider_auth.vm_reconcile_timeout | default(idcloudhost_vm_default_reconcile_timeout | default(1800))) | int, 1] | max }}"
+    idcloudhost_vm_reconcile_delay: "{{ [cloud_provider_resource_detail.vm.reconcile_delay | default(cloud_provider_auth.vm_reconcile_delay | default(idcloudhost_vm_default_reconcile_delay | default(10))) | int, 1] | max }}"
+    idcloudhost_vm_create_success_statuses:
+      - 200
+      - 201
+      - 202
+    idcloudhost_vm_create_reconcile_statuses:
+      - 400
+      - 409
+      - 422
+      - 500
   no_log: true
 
 - name: Set IDCloudHost VM wait retries
   ansible.builtin.set_fact:
     idcloudhost_vm_wait_retries: "{{ [((idcloudhost_vm_wait_timeout | int) / (idcloudhost_vm_wait_delay | int)) | round(0, 'ceil') | int, 1] | max }}"
+    idcloudhost_vm_reconcile_retries: "{{ [((idcloudhost_vm_reconcile_timeout | int) / (idcloudhost_vm_reconcile_delay | int)) | round(0, 'ceil') | int, 1] | max }}"
 
 - name: Set IDCloudHost VM API path
   ansible.builtin.set_fact:
@@ -128,7 +140,7 @@
       - 422
       - 500
   register: idcloudhost_vm_create_response
-  changed_when: idcloudhost_vm_create_response.status in [200, 201, 202]
+  changed_when: idcloudhost_vm_create_response.status in idcloudhost_vm_create_success_statuses
   failed_when: false
   when: idcloudhost_vm_existing.uuid | default('') | length == 0
   no_log: true
@@ -138,7 +150,26 @@
     idcloudhost_vm_created_uuid: "{{ idcloudhost_vm_create_response.json.uuid | default('') }}"
   when:
     - idcloudhost_vm_existing.uuid | default('') | length == 0
-    - idcloudhost_vm_create_response.status in [200, 201, 202]
+    - idcloudhost_vm_create_response is defined
+
+- name: Build IDCloudHost VM create rejection detail
+  ansible.builtin.set_fact:
+    idcloudhost_vm_create_error_status: "{{ idcloudhost_vm_create_response.status | default('unknown') }}"
+    idcloudhost_vm_create_error_response: >-
+      {%- set response_json = idcloudhost_vm_create_response.json | default({}) -%}
+      {%- if response_json is mapping -%}
+      {{ response_json.Error | default(response_json.error | default(response_json.errors | default(response_json.message | default(response_json.Message | default(response_json.detail | default(response_json.details | default(response_json | to_json))))))) }}
+      {%- elif response_json -%}
+      {{ response_json | to_json }}
+      {%- elif idcloudhost_vm_create_response.content | default('') | length > 0 -%}
+      {{ idcloudhost_vm_create_response.content }}
+      {%- else -%}
+      empty provider response
+      {%- endif -%}
+  when:
+    - idcloudhost_vm_existing.uuid | default('') | length == 0
+    - idcloudhost_vm_create_response is defined
+    - idcloudhost_vm_create_response.status not in idcloudhost_vm_create_success_statuses
 
 - name: Wait for IDCloudHost VM creation to become visible
   ansible.builtin.uri:
@@ -179,7 +210,7 @@
   failed_when: false
   when:
     - idcloudhost_vm_existing.uuid | default('') | length == 0
-    - idcloudhost_vm_create_response.status in [200, 201, 202]
+    - idcloudhost_vm_create_response.status in idcloudhost_vm_create_success_statuses
   no_log: true
 
 - name: Resolve created IDCloudHost VM after wait
@@ -207,21 +238,102 @@
       }}
   when:
     - idcloudhost_vm_existing.uuid | default('') | length == 0
-    - idcloudhost_vm_create_response.status in [200, 201, 202]
+    - idcloudhost_vm_create_response.status in idcloudhost_vm_create_success_statuses
+
+- name: Reconcile IDCloudHost VM creation after rejected response
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_list_api_path }}"
+    method: GET
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: idcloudhost_vm_reconcile_list_response
+  until: >-
+    (
+      idcloudhost_vm_created_uuid | default('') | length > 0
+      and
+      (
+        idcloudhost_vm_reconcile_list_response.json
+        | default([])
+        | selectattr('uuid', 'equalto', idcloudhost_vm_created_uuid)
+        | list
+        | length
+      ) > 0
+    )
+    or
+    (
+      idcloudhost_vm_created_uuid | default('') | length == 0
+      and
+      (
+        idcloudhost_vm_reconcile_list_response.json
+        | default([])
+        | selectattr('name', 'equalto', idcloudhost_vm.name)
+        | list
+        | length
+      ) > 0
+    )
+  retries: "{{ idcloudhost_vm_reconcile_retries }}"
+  delay: "{{ idcloudhost_vm_reconcile_delay }}"
+  failed_when: false
+  when:
+    - idcloudhost_vm_existing.uuid | default('') | length == 0
+    - idcloudhost_vm_create_response.status in idcloudhost_vm_create_reconcile_statuses
+  no_log: true
+
+- name: Resolve created IDCloudHost VM after rejected response reconciliation
+  ansible.builtin.set_fact:
+    idcloudhost_vm_created: >-
+      {{
+        (
+          idcloudhost_vm_reconcile_list_response.json
+          | default([])
+          | selectattr('uuid', 'equalto', idcloudhost_vm_created_uuid | default(''))
+          | list
+          | first
+          | default({})
+        )
+        if idcloudhost_vm_created_uuid | default('') | length > 0
+        else
+        (
+          idcloudhost_vm_reconcile_list_response.json
+          | default([])
+          | selectattr('name', 'equalto', idcloudhost_vm.name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - idcloudhost_vm_existing.uuid | default('') | length == 0
+    - idcloudhost_vm_create_response.status in idcloudhost_vm_create_reconcile_statuses
 
 - name: Fail when IDCloudHost VM creation request is rejected
   ansible.builtin.fail:
-    msg: "{{ idcloudhost_vm_create_response.json.errors | default(idcloudhost_vm_create_response.json.error | default(idcloudhost_vm_create_response.content | default('IDCloudHost VM creation failed'))) }}"
+    msg: >-
+      IDCloudHost VM creation request was rejected
+      (status={{ idcloudhost_vm_create_error_status | default(idcloudhost_vm_create_response.status | default('unknown')) }},
+      path={{ idcloudhost_vm_api_path }},
+      region={{ idcloudhost_vm_region | default('') }},
+      name={{ idcloudhost_vm.name }}).
+      Provider response: {{ idcloudhost_vm_create_error_response | default('empty provider response') }}.
+      Reconciliation: {{
+        'no matching VM was visible in ' ~ idcloudhost_vm_reconcile_timeout ~ ' seconds'
+        if idcloudhost_vm_create_response.status in idcloudhost_vm_create_reconcile_statuses
+        else 'not attempted for this status'
+      }}.
   when:
     - idcloudhost_vm_existing.uuid | default('') | length == 0
-    - idcloudhost_vm_create_response.status not in [200, 201, 202]
+    - idcloudhost_vm_create_response.status not in idcloudhost_vm_create_success_statuses
+    - idcloudhost_vm_created.uuid | default('') | length == 0
 
 - name: Fail when IDCloudHost VM creation is not visible before timeout
   ansible.builtin.fail:
     msg: "IDCloudHost VM creation was accepted but VM {{ idcloudhost_vm.name }} did not become visible in {{ idcloudhost_vm_wait_timeout }} seconds."
   when:
     - idcloudhost_vm_existing.uuid | default('') | length == 0
-    - idcloudhost_vm_create_response.status in [200, 201, 202]
+    - idcloudhost_vm_create_response.status in idcloudhost_vm_create_success_statuses
     - idcloudhost_vm_created.uuid | default('') | length == 0
 
 - name: Set IDCloudHost VM result

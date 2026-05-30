@@ -12,3 +12,9 @@ cloud_provider_resource_detail: {}
 # request before the VM is immediately visible in /user-resource/vm/list.
 idcloudhost_vm_default_wait_timeout: 1800
 idcloudhost_vm_default_wait_delay: 10
+
+# IDCloudHost can occasionally return a rejected create response even though the
+# VM is being provisioned. Reconcile retryable rejections against the VM list
+# before failing the task.
+idcloudhost_vm_default_reconcile_timeout: 1800
+idcloudhost_vm_default_reconcile_delay: 10

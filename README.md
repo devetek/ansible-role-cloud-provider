@@ -142,6 +142,10 @@ Example Playbook
         # IDCloudHost VM creation to become visible in the VM list.
         wait_timeout: 1800
         wait_delay: 10
+        # Optional. If IDCloudHost returns a retryable rejected create response,
+        # the role reconciles against the VM list before failing.
+        reconcile_timeout: 1800
+        reconcile_delay: 10
         cloud_init:
           package_update: true
 
@@ -160,6 +164,13 @@ UUID or name, using `vm.wait_timeout`/`cloud_provider_auth.vm_wait_timeout`
 with a default of `1800` seconds and `vm.wait_delay`/`cloud_provider_auth.vm_wait_delay`
 with a default of `10` seconds. If the VM is still not visible when the timeout
 expires, the role fails the task.
+
+If IDCloudHost returns a retryable rejected create response (`400`, `409`,
+`422`, or `500`), the role also reconciles against the VM list by UUID or name
+for up to `vm.reconcile_timeout`/`cloud_provider_auth.vm_reconcile_timeout`
+seconds before failing. If the VM is found, the role continues with the provider
+VM output instead of treating the create response as fatal. Authentication and
+authorization failures are not retried.
 
 License
 -------
