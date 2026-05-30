@@ -54,7 +54,7 @@ List of variables in ansible-role-cloud-provider:
 
 ```sh
 ---
-cloud_provider: "gcp" # gcp | aws | proxmox
+cloud_provider: "gcp" # gcp | idcloudhost
 cloud_provider_auth: {} # depend on provider
 cloud_provider_resource_type: # array of resource type
   - "global-forwarding-rule"
@@ -106,6 +106,49 @@ Example Playbook
   roles:
     - role: dpanel.cloud-provider
 ```
+
+### IDCloudHost VM example
+
+```yaml
+---
+- name: Create an IDCloudHost VM
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "idcloudhost"
+    cloud_provider_resource_type:
+      - "vm"
+    cloud_provider_auth:
+      token: "{{ idcloudhost_api_token }}"
+      # Optional. If omitted, IDCloudHost default location is used.
+      region: "jkt01"
+    cloud_provider_resource_detail:
+      vm:
+        name: "dpanel-idcloudhost-01"
+        region: "jkt01"
+        os_name: "ubuntu"
+        os_version: "22.04-lts"
+        disks: 20
+        vcpu: 2
+        ram: 2048
+        username: "dpanel"
+        password: "{{ idcloudhost_vm_password }}"
+        billing_account_id: 12345
+        network_uuid: "50341410-9e88-4af2-a21e-b8c898e33e52"
+        reserve_public_ip: true
+        cloud_init:
+          package_update: true
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The role writes VM creation output to `output_idcloudhost_vm` and `output_vm`
+when `with_output: true`. Each output item is keyed by VM name and includes the
+provider response, including the IDCloudHost `uuid` that dPanel can store as the
+provider instance reference.
 
 License
 -------

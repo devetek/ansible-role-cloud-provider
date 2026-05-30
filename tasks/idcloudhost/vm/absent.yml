@@ -1,0 +1,97 @@
+---
+- name: Validate IDCloudHost VM delete input
+  ansible.builtin.assert:
+    that:
+      - cloud_provider_auth.token | default(cloud_provider_auth.apikey | default(cloud_provider_auth.api_key | default(''))) | length > 0
+      - cloud_provider_resource_detail.vm is defined
+      - cloud_provider_resource_detail.vm.uuid is defined or cloud_provider_resource_detail.vm.name is defined
+    fail_msg: "IDCloudHost VM deletion requires auth.token and vm.uuid or vm.name."
+
+- name: Set IDCloudHost VM variables for deletion
+  ansible.builtin.set_fact:
+    idcloudhost_api_base_url: "{{ cloud_provider_auth.api_base_url | default('https://api.idcloudhost.com') }}"
+    idcloudhost_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.apikey | default(cloud_provider_auth.api_key)) }}"
+    idcloudhost_vm: "{{ cloud_provider_resource_detail.vm }}"
+    idcloudhost_vm_region: "{{ cloud_provider_resource_detail.vm.region | default(cloud_provider_resource_detail.vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
+  no_log: true
+
+- name: Set IDCloudHost VM deletion API path
+  ansible.builtin.set_fact:
+    idcloudhost_vm_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm' }}"
+    idcloudhost_vm_list_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm/list' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm/list' }}"
+
+- name: List IDCloudHost VMs for deletion
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_list_api_path }}"
+    method: GET
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: idcloudhost_vm_list_response
+  no_log: true
+
+- name: Resolve IDCloudHost VM to delete
+  ansible.builtin.set_fact:
+    idcloudhost_vm_existing: >-
+      {{
+        (
+          idcloudhost_vm_list_response.json
+          | default([])
+          | selectattr('uuid', 'equalto', idcloudhost_vm.uuid | default(''))
+          | list
+          | first
+          | default({})
+        )
+        if idcloudhost_vm.uuid | default('') | length > 0
+        else
+        (
+          idcloudhost_vm_list_response.json
+          | default([])
+          | selectattr('name', 'equalto', idcloudhost_vm.name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Delete IDCloudHost VM
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_api_path }}"
+    method: DELETE
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+      content-type: application/x-www-form-urlencoded
+    body_format: form-urlencoded
+    body:
+      uuid: "{{ idcloudhost_vm_existing.uuid }}"
+    return_content: true
+    status_code:
+      - 200
+      - 202
+      - 204
+      - 400
+      - 401
+      - 403
+      - 404
+      - 422
+      - 500
+  register: idcloudhost_vm_delete_response
+  changed_when: idcloudhost_vm_delete_response.status in [200, 202, 204]
+  failed_when: false
+  when: idcloudhost_vm_existing.uuid | default('') | length > 0
+  no_log: true
+
+- name: Fail when IDCloudHost VM deletion fails
+  ansible.builtin.fail:
+    msg: "{{ idcloudhost_vm_delete_response.json.errors | default(idcloudhost_vm_delete_response.json.error | default(idcloudhost_vm_delete_response.content | default('IDCloudHost VM deletion failed'))) }}"
+  when:
+    - idcloudhost_vm_existing.uuid | default('') | length > 0
+    - idcloudhost_vm_delete_response.status not in [200, 202, 204]
+
+- name: Set IDCloudHost VM deletion output
+  ansible.builtin.set_fact:
+    output_idcloudhost_vm: "{{ output_idcloudhost_vm | default({}) | combine({ idcloudhost_vm.name | default(idcloudhost_vm_existing.uuid): {'deleted': true, 'uuid': idcloudhost_vm_existing.uuid | default('')} }, recursive=True) }}"
+    output_vm: "{{ output_vm | default({}) | combine({ idcloudhost_vm.name | default(idcloudhost_vm_existing.uuid): {'deleted': true, 'uuid': idcloudhost_vm_existing.uuid | default('')} }, recursive=True) }}"
+  when: with_output is defined and with_output

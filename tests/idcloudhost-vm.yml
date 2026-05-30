@@ -1,0 +1,26 @@
+---
+- name: Syntax check IDCloudHost VM role path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    state: present
+    with_output: true
+    cloud_provider: idcloudhost
+    cloud_provider_auth:
+      token: test-token
+      region: jkt01
+    cloud_provider_resource_type:
+      - vm
+    cloud_provider_resource_detail:
+      vm:
+        name: dpanel-idcloudhost-test
+        region: jkt01
+        os_name: ubuntu
+        os_version: 22.04-lts
+        disks: 20
+        vcpu: 2
+        ram: 2048
+        username: dpanel
+        password: Password123
+  roles:
+    - role: ansible-role-cloud-provider

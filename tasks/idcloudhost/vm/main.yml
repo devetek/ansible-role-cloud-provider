@@ -1,0 +1,3 @@
+---
+- name: Include IDCloudHost VM management
+  ansible.builtin.include_tasks: "{{ cloud_provider | lower }}/{{ item }}/{{ include_state | default(state) }}.yml"

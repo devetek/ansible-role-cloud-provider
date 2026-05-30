@@ -1,0 +1,145 @@
+---
+- name: Validate IDCloudHost VM create input
+  ansible.builtin.assert:
+    that:
+      - cloud_provider_auth.token | default(cloud_provider_auth.apikey | default(cloud_provider_auth.api_key | default(''))) | length > 0
+      - cloud_provider_resource_detail.vm is defined
+      - cloud_provider_resource_detail.vm.name is defined
+      - cloud_provider_resource_detail.vm.os_name is defined
+      - cloud_provider_resource_detail.vm.os_version is defined
+      - cloud_provider_resource_detail.vm.disks is defined
+      - cloud_provider_resource_detail.vm.vcpu is defined
+      - cloud_provider_resource_detail.vm.ram is defined
+      - cloud_provider_resource_detail.vm.username is defined
+      - cloud_provider_resource_detail.vm.password is defined
+    fail_msg: "IDCloudHost VM creation requires auth.token and vm name, os_name, os_version, disks, vcpu, ram, username, and password."
+
+- name: Set IDCloudHost VM variables
+  ansible.builtin.set_fact:
+    idcloudhost_api_base_url: "{{ cloud_provider_auth.api_base_url | default('https://api.idcloudhost.com') }}"
+    idcloudhost_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.apikey | default(cloud_provider_auth.api_key)) }}"
+    idcloudhost_vm: "{{ cloud_provider_resource_detail.vm }}"
+    idcloudhost_vm_region: "{{ cloud_provider_resource_detail.vm.region | default(cloud_provider_resource_detail.vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
+  no_log: true
+
+- name: Set IDCloudHost VM API path
+  ansible.builtin.set_fact:
+    idcloudhost_vm_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm' }}"
+    idcloudhost_vm_list_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm/list' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm/list' }}"
+
+- name: List IDCloudHost VMs
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_list_api_path }}"
+    method: GET
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: idcloudhost_vm_list_response
+  no_log: true
+
+- name: Resolve existing IDCloudHost VM
+  ansible.builtin.set_fact:
+    idcloudhost_vm_existing: >-
+      {{
+        (
+          idcloudhost_vm_list_response.json
+          | default([])
+          | selectattr('uuid', 'equalto', idcloudhost_vm.uuid | default(''))
+          | list
+          | first
+          | default({})
+        )
+        if idcloudhost_vm.uuid | default('') | length > 0
+        else
+        (
+          idcloudhost_vm_list_response.json
+          | default([])
+          | selectattr('name', 'equalto', idcloudhost_vm.name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Initialize IDCloudHost VM create body
+  ansible.builtin.set_fact:
+    idcloudhost_vm_create_body:
+      name: "{{ idcloudhost_vm.name }}"
+      os_name: "{{ idcloudhost_vm.os_name }}"
+      os_version: "{{ idcloudhost_vm.os_version }}"
+      disks: "{{ idcloudhost_vm.disks }}"
+      vcpu: "{{ idcloudhost_vm.vcpu }}"
+      ram: "{{ idcloudhost_vm.ram }}"
+      username: "{{ idcloudhost_vm.username }}"
+      password: "{{ idcloudhost_vm.password }}"
+  no_log: true
+
+- name: Add optional IDCloudHost VM create fields
+  ansible.builtin.set_fact:
+    idcloudhost_vm_create_body: "{{ idcloudhost_vm_create_body | combine({ item: idcloudhost_vm[item] }) }}"
+  loop:
+    - backup
+    - billing_account_id
+    - description
+    - designated_pool_uuid
+    - network_uuid
+    - reserve_public_ip
+    - public_key
+    - public_keys
+    - source_uuid
+    - source_replica
+    - disk_uuid
+  when: idcloudhost_vm[item] is defined
+  no_log: true
+
+- name: Add IDCloudHost VM cloud-init
+  ansible.builtin.set_fact:
+    idcloudhost_vm_create_body: "{{ idcloudhost_vm_create_body | combine({'cloud_init': idcloudhost_vm.cloud_init if idcloudhost_vm.cloud_init is string else (idcloudhost_vm.cloud_init | to_json)}) }}"
+  when: idcloudhost_vm.cloud_init is defined
+  no_log: true
+
+- name: Create IDCloudHost VM
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_api_path }}"
+    method: POST
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+      content-type: application/x-www-form-urlencoded
+    body_format: form-urlencoded
+    body: "{{ idcloudhost_vm_create_body }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+      - 202
+      - 400
+      - 401
+      - 403
+      - 404
+      - 409
+      - 422
+      - 500
+  register: idcloudhost_vm_create_response
+  changed_when: idcloudhost_vm_create_response.status in [200, 201, 202] and (idcloudhost_vm_create_response.json.uuid | default('')) | length > 0
+  failed_when: false
+  when: idcloudhost_vm_existing.uuid | default('') | length == 0
+  no_log: true
+
+- name: Fail when IDCloudHost VM creation fails
+  ansible.builtin.fail:
+    msg: "{{ idcloudhost_vm_create_response.json.errors | default(idcloudhost_vm_create_response.json.error | default(idcloudhost_vm_create_response.content | default('IDCloudHost VM creation failed'))) }}"
+  when:
+    - idcloudhost_vm_existing.uuid | default('') | length == 0
+    - idcloudhost_vm_create_response.status not in [200, 201, 202] or (idcloudhost_vm_create_response.json.uuid | default('')) | length == 0
+
+- name: Set IDCloudHost VM result
+  ansible.builtin.set_fact:
+    idcloudhost_vm_result: "{{ idcloudhost_vm_existing if idcloudhost_vm_existing.uuid | default('') | length > 0 else idcloudhost_vm_create_response.json }}"
+
+- name: Set IDCloudHost VM output
+  ansible.builtin.set_fact:
+    output_idcloudhost_vm: "{{ output_idcloudhost_vm | default({}) | combine({ idcloudhost_vm.name: idcloudhost_vm_result }, recursive=True) }}"
+    output_vm: "{{ output_vm | default({}) | combine({ idcloudhost_vm.name: idcloudhost_vm_result }, recursive=True) }}"
+  when: with_output is defined and with_output

@@ -1,6 +1,6 @@
 ---
 - name: Resource Deletion
-  ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/main.yml"
+  ansible.builtin.include_tasks: "{{ cloud_provider | lower }}/{{ item }}/main.yml"
   when:
     - cloud_provider_resource_type is defined
   loop: "{{ cloud_provider_resource_type | reverse }}"
