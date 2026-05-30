@@ -44,6 +44,7 @@
   ansible.builtin.set_fact:
     idcloudhost_vm_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm' }}"
     idcloudhost_vm_list_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/user-resource/vm/list' if idcloudhost_vm_region | length > 0 else '/v1/user-resource/vm/list' }}"
+    idcloudhost_vm_public_ip_api_path: "{{ '/v1/' ~ idcloudhost_vm_region ~ '/network/ip_addresses' if idcloudhost_vm_region | length > 0 else '/v1/network/ip_addresses' }}"
 
 - name: List IDCloudHost VMs
   ansible.builtin.uri:
@@ -339,6 +340,65 @@
 - name: Set IDCloudHost VM result
   ansible.builtin.set_fact:
     idcloudhost_vm_result: "{{ idcloudhost_vm_existing if idcloudhost_vm_existing.uuid | default('') | length > 0 else idcloudhost_vm_created }}"
+
+- name: Normalize IDCloudHost VM private IP output
+  ansible.builtin.set_fact:
+    idcloudhost_vm_result: "{{ idcloudhost_vm_result | combine({'private_ip': idcloudhost_vm_result.private_ipv4}, recursive=True) }}"
+  when: idcloudhost_vm_result.private_ipv4 | default('') | length > 0
+
+- name: List IDCloudHost VM public addresses
+  ansible.builtin.uri:
+    url: "{{ idcloudhost_api_base_url }}{{ idcloudhost_vm_public_ip_api_path }}?vm_uuid={{ idcloudhost_vm_result.uuid }}"
+    method: GET
+    headers:
+      apikey: "{{ idcloudhost_api_token }}"
+    return_content: true
+    status_code:
+      - 200
+  register: idcloudhost_vm_public_ip_response
+  failed_when: false
+  when:
+    - idcloudhost_vm_result.uuid | default('') | length > 0
+    - idcloudhost_vm.reserve_public_ip | default(true) | bool
+  no_log: true
+
+- name: Resolve IDCloudHost VM public address
+  ansible.builtin.set_fact:
+    idcloudhost_vm_public_address: >-
+      {{
+        (
+          idcloudhost_vm_public_ip_response.json
+          | default([])
+          | selectattr('assigned_to', 'equalto', idcloudhost_vm_result.uuid)
+          | rejectattr('is_deleted', 'equalto', true)
+          | selectattr('enabled', 'equalto', true)
+          | selectattr('type', 'equalto', 'public')
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when:
+    - idcloudhost_vm_result.uuid | default('') | length > 0
+    - idcloudhost_vm.reserve_public_ip | default(true) | bool
+    - idcloudhost_vm_public_ip_response is defined
+
+- name: Enrich IDCloudHost VM output with public IP
+  ansible.builtin.set_fact:
+    idcloudhost_vm_result: >-
+      {{
+        idcloudhost_vm_result
+        | combine(
+            {
+              'public_ip': idcloudhost_vm_public_address.address,
+              'public_ipv4': idcloudhost_vm_public_address.address,
+              'public_ip_uuid': idcloudhost_vm_public_address.uuid | default(''),
+              'public_ip_resource': idcloudhost_vm_public_address,
+            },
+            recursive=True
+          )
+      }}
+  when: idcloudhost_vm_public_address.address | default('') | length > 0
 
 - name: Set IDCloudHost VM output
   ansible.builtin.set_fact:

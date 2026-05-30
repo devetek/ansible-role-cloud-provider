@@ -156,7 +156,10 @@ Example Playbook
 The role writes VM creation output to `output_idcloudhost_vm` and `output_vm`
 when `with_output: true`. Each output item is keyed by VM name and includes the
 provider response, including the IDCloudHost `uuid` that dPanel can store as the
-provider instance reference.
+provider instance reference. When `reserve_public_ip` is enabled and IDCloudHost
+returns an assigned public address from `/network/ip_addresses`, the role enriches
+the VM output with `public_ip` and `public_ipv4` so dPanel can run setup against
+the reachable address.
 
 For IDCloudHost VM creation, the role treats a successful create request as
 asynchronous. It polls the IDCloudHost VM list until the new VM is visible by
