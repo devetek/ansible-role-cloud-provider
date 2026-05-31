@@ -65,48 +65,6 @@ state: "present" # present | absent
 Example Playbook
 ----------------
 
-```sh
----
-# includes all dependencies
-- name: Manage a Global Address
-  ansible.builtin.import_playbook: global-address.yaml
-  vars:
-    with_output: true
-    include_state: "present"
-
-- name: Manage a HTTPS Proxy (Backend URL Map Included)
-  ansible.builtin.import_playbook: target-https-proxy.yaml
-  vars:
-    with_output: true
-    include_state: "present"
-# includes all dependencies
-
-- name: Manage Global Forwarding Rule
-  hosts: localhost
-  gather_facts: false
-  
-  vars:
-    with_output: true
-    cloud_provider: "gcp"
-    cloud_provider_resource_type:
-      - "global-forwarding-rule"
-    cloud_provider_auth:
-      project_id: "terpusat"
-      auth_kind: "serviceaccount"
-      service_acount_token: "../../credential.json"
-    cloud_provider_resource_detail:
-      global_forwarding_rule:
-        name: "global-forwarding-rule"
-        description: "Global Forwarding Rule"
-        ip_address: "{{ output_global_address['external-global-address'].address }}"
-        port_range: "443"
-        target: "{{ output_target_https_proxy['https-proxy'].selfLink }}"
-
-
-  roles:
-    - role: dpanel.cloud-provider
-```
-
 ### GCP VM example
 
 ```yaml
