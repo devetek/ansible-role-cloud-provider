@@ -10,6 +10,9 @@
       - gcp_compute_instance.zone | default('') | length > 0
     fail_msg: "GCP Compute Engine deletion requires compute_instance.name and compute_instance.zone. Use cloud_provider_resource_type: ['vm'] for the generic dPanel VM payload."
 
+- name: Prepare GCP Python dependencies
+  ansible.builtin.include_tasks: gcp/_python_dependencies.yml
+
 - name: Delete a Instance (Compute Engine)
   google.cloud.gcp_compute_instance:
     name: "{{ gcp_compute_instance.name }}"
