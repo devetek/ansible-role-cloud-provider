@@ -1,23 +1,34 @@
 ---
+- name: Resolve Compute Engine delete detail
+  ansible.builtin.set_fact:
+    gcp_compute_instance: "{{ cloud_provider_resource_detail.compute_instance | default(gcp_compute_instance_detail | default({}), true) }}"
+
+- name: Validate Compute Engine delete detail
+  ansible.builtin.assert:
+    that:
+      - gcp_compute_instance.name | default('') | length > 0
+      - gcp_compute_instance.zone | default('') | length > 0
+    fail_msg: "GCP Compute Engine deletion requires compute_instance.name and compute_instance.zone. Use cloud_provider_resource_type: ['vm'] for the generic dPanel VM payload."
+
 - name: Delete a Instance (Compute Engine)
   google.cloud.gcp_compute_instance:
-    name: "{{ cloud_provider_resource_detail.compute_instance.name }}"
-    zone: "{{ cloud_provider_resource_detail.compute_instance.zone }}"
-    machine_type: "{{ cloud_provider_resource_detail.compute_instance.machine_type | default('n1-standard-1') }}"
-    tags: "{{ cloud_provider_resource_detail.compute_instance.tags | default(omit) }}"
-    scopes: "{{ cloud_provider_resource_detail.compute_instance.scopes | default(omit) }}"
-    scheduling: "{{ cloud_provider_resource_detail.compute_instance.scheduling | default(omit) }}"
-    can_ip_forward: "{{ cloud_provider_resource_detail.compute_instance.can_ip_forward | default(omit) }}"
-    min_cpu_platform: "{{ cloud_provider_resource_detail.compute_instance.min_cpu_platform | default(omit) }}"
-    confidential_instance_config: "{{ cloud_provider_resource_detail.compute_instance.confidential_instance_config | default(omit) }}"
-    disks: "{{ cloud_provider_resource_detail.compute_instance.disks | default(omit) }}"
-    metadata: "{{ cloud_provider_resource_detail.compute_instance.metadata | default(omit) }}"
-    labels: "{{ cloud_provider_resource_detail.compute_instance.labels | default(omit) }}"
-    network_interfaces: "{{ cloud_provider_resource_detail.compute_instance.network_interfaces | default(omit) }}"
-    shielded_instance_config: "{{ cloud_provider_resource_detail.compute_instance.shielded_instance_config | default(omit) }}"
-    service_accounts: "{{ cloud_provider_resource_detail.compute_instance.service_accounts | default(omit) }}"
+    name: "{{ gcp_compute_instance.name }}"
+    zone: "{{ gcp_compute_instance.zone }}"
+    machine_type: "{{ gcp_compute_instance.machine_type | default('n1-standard-1') }}"
+    tags: "{{ gcp_compute_instance.tags | default(omit) }}"
+    scopes: "{{ gcp_compute_instance.scopes | default(omit) }}"
+    scheduling: "{{ gcp_compute_instance.scheduling | default(omit) }}"
+    can_ip_forward: "{{ gcp_compute_instance.can_ip_forward | default(omit) }}"
+    min_cpu_platform: "{{ gcp_compute_instance.min_cpu_platform | default(omit) }}"
+    confidential_instance_config: "{{ gcp_compute_instance.confidential_instance_config | default(omit) }}"
+    disks: "{{ gcp_compute_instance.disks | default(omit) }}"
+    metadata: "{{ gcp_compute_instance.metadata | default(omit) }}"
+    labels: "{{ gcp_compute_instance.labels | default(omit) }}"
+    network_interfaces: "{{ gcp_compute_instance.network_interfaces | default(omit) }}"
+    shielded_instance_config: "{{ gcp_compute_instance.shielded_instance_config | default(omit) }}"
+    service_accounts: "{{ gcp_compute_instance.service_accounts | default(omit) }}"
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_email: "{{ cloud_provider_auth.service_account_email | default(omit) }}"
-    service_account_file: "{{ cloud_provider_auth.service_account_file | default(cloud_provider_auth.service_acount_token) }}"
+    service_account_file: "{{ cloud_provider_auth.service_account_file | default(cloud_provider_auth.service_acount_token | default(gcp_service_account_file | default(omit), true), true) }}"
     state: "absent"
