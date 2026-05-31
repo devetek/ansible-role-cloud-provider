@@ -24,6 +24,10 @@
     - name: Alias generic GCP VM delete payload to Compute Engine detail
       ansible.builtin.set_fact:
         cloud_provider_auth: "{{ cloud_provider_auth | combine({'service_acount_token': gcp_service_account_file}, recursive=True) }}"
+        gcp_compute_instance_detail:
+          name: "{{ gcp_vm_name }}"
+          zone: "{{ gcp_vm_zone }}"
+          machine_type: "{{ gcp_vm.machine_type | default('e2-medium') }}"
         cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'compute_instance': {'name': gcp_vm_name, 'zone': gcp_vm_zone, 'machine_type': gcp_vm.machine_type | default('e2-medium')}}, recursive=True) }}"
 
     - name: Run GCP Compute Engine implementation for VM alias deletion
