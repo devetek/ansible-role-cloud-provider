@@ -1,0 +1,34 @@
+---
+- name: Resolve GCP service account file
+  ansible.builtin.set_fact:
+    gcp_service_account_file: "{{ cloud_provider_auth.service_account_file | default(cloud_provider_auth.service_acount_token | default('')) }}"
+
+- name: Create temporary GCP service account file
+  ansible.builtin.tempfile:
+    state: file
+    suffix: .json
+  register: gcp_service_account_temp
+  when:
+    - gcp_service_account_file | length == 0
+    - cloud_provider_auth.service_account_json | default('') | length > 0
+  no_log: true
+
+- name: Write temporary GCP service account JSON
+  ansible.builtin.copy:
+    content: "{{ cloud_provider_auth.service_account_json }}"
+    dest: "{{ gcp_service_account_temp.path }}"
+    mode: "0600"
+  when: gcp_service_account_temp.path is defined
+  no_log: true
+
+- name: Use temporary GCP service account file
+  ansible.builtin.set_fact:
+    gcp_service_account_file: "{{ gcp_service_account_temp.path }}"
+  when: gcp_service_account_temp.path is defined
+  no_log: true
+
+- name: Validate GCP service account file
+  ansible.builtin.assert:
+    that:
+      - gcp_service_account_file | length > 0
+    fail_msg: "GCP VM management requires cloud_provider_auth.service_account_json or cloud_provider_auth.service_account_file."

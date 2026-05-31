@@ -1,0 +1,43 @@
+---
+- name: Delete GCP VM through Compute Engine alias
+  block:
+    - name: Normalize GCP VM delete request
+      ansible.builtin.set_fact:
+        gcp_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize GCP VM delete fields
+      ansible.builtin.set_fact:
+        gcp_vm_name: "{{ gcp_vm.name | default(gcp_vm.vm_name | default(gcp_vm.instance_name | default(''))) }}"
+        gcp_vm_zone: "{{ gcp_vm.zone | default(gcp_vm.region_id | default(gcp_vm.region | default(''))) }}"
+
+    - name: Validate GCP VM delete request
+      ansible.builtin.assert:
+        that:
+          - cloud_provider_auth.project_id | default('') | length > 0
+          - gcp_vm_name | length > 0
+          - gcp_vm_zone | length > 0
+        fail_msg: "GCP VM deletion requires cloud_provider_auth.project_id, vm.name, and vm.zone."
+
+    - name: Resolve GCP VM authentication
+      ansible.builtin.include_tasks: gcp/vm/_auth.yml
+
+    - name: Alias generic GCP VM delete payload to Compute Engine detail
+      ansible.builtin.set_fact:
+        cloud_provider_auth: "{{ cloud_provider_auth | combine({'service_acount_token': gcp_service_account_file}, recursive=True) }}"
+        cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'compute_instance': {'name': gcp_vm_name, 'zone': gcp_vm_zone, 'machine_type': gcp_vm.machine_type | default('e2-medium')}}, recursive=True) }}"
+
+    - name: Run GCP Compute Engine implementation for VM alias deletion
+      ansible.builtin.include_tasks: gcp/compute-engine/absent.yml
+
+    - name: Set GCP VM delete alias output
+      ansible.builtin.set_fact:
+        output_gcp_vm: "{{ output_gcp_vm | default({}) | combine({ gcp_vm_name: {'deleted': true, 'provider': 'gcp', 'name': gcp_vm_name, 'instance_name': gcp_vm_name, 'zone': gcp_vm_zone, 'region_id': gcp_vm_zone} }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ gcp_vm_name: {'deleted': true, 'provider': 'gcp', 'name': gcp_vm_name, 'instance_name': gcp_vm_name, 'zone': gcp_vm_zone, 'region_id': gcp_vm_zone} }, recursive=True) }}"
+      when: with_output is defined and with_output
+  always:
+    - name: Remove temporary GCP service account file
+      ansible.builtin.file:
+        path: "{{ gcp_service_account_temp.path }}"
+        state: absent
+      when: gcp_service_account_temp.path is defined
+      no_log: true

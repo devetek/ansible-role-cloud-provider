@@ -1,7 +1,7 @@
 ---
 - name: Init Compute Engine Output
   ansible.builtin.set_fact:
-    output_compute_instance: null
+    output_compute_instance: {}
   when: with_output is defined and with_output and output_compute_instance is not defined
 
 - name: Create a Instance (Compute Engine)
@@ -24,7 +24,7 @@
     project: "{{ cloud_provider_auth.project_id }}"
     auth_kind: "{{ cloud_provider_auth.auth_kind }}"
     service_account_email: "{{ cloud_provider_auth.service_account_email | default(omit) }}"
-    service_account_file: "{{ cloud_provider_auth.service_acount_token }}"
+    service_account_file: "{{ cloud_provider_auth.service_account_file | default(cloud_provider_auth.service_acount_token) }}"
     state: "present"
   register: compute_instance_result
   

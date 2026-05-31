@@ -1,0 +1,27 @@
+---
+- name: Syntax check GCP VM alias role path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    state: present
+    with_output: true
+    cloud_provider: gcp
+    cloud_provider_auth:
+      project_id: test-project
+      auth_kind: serviceaccount
+      service_account_json: '{"type":"service_account","project_id":"test-project","private_key_id":"test","private_key":"-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n","client_email":"dpanel@test-project.iam.gserviceaccount.com","token_uri":"https://oauth2.googleapis.com/token"}'
+    cloud_provider_resource_type:
+      - vm
+    cloud_provider_resource_detail:
+      vm:
+        name: dpanel-gcp-test
+        region: asia-southeast2
+        zone: asia-southeast2-a
+        machine_type: e2-medium
+        source_image: projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64
+        disk_size_gb: 20
+        username: dpanel
+        public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDpanelSyntaxTest dpanel@example
+        reserve_public_ip: true
+  roles:
+    - role: ansible-role-cloud-provider

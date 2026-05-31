@@ -54,7 +54,7 @@ List of variables in ansible-role-cloud-provider:
 
 ```sh
 ---
-cloud_provider: "gcp" # gcp | idcloudhost
+cloud_provider: "gcp" # gcp | idcloudhost | biznetgio
 cloud_provider_auth: {} # depend on provider
 cloud_provider_resource_type: # array of resource type
   - "global-forwarding-rule"
@@ -106,6 +106,65 @@ Example Playbook
   roles:
     - role: dpanel.cloud-provider
 ```
+
+### GCP VM example
+
+```yaml
+---
+- name: Create a GCP VM
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "gcp"
+    cloud_provider_resource_type:
+      - "vm"
+    cloud_provider_auth:
+      project_id: "my-gcp-project"
+      auth_kind: "serviceaccount"
+      # dPanel passes the stored cloud project service account JSON here.
+      # The role writes it to a temporary local file because the google.cloud
+      # collection expects service_account_file.
+      service_account_json: "{{ gcp_service_account_json }}"
+    cloud_provider_resource_detail:
+      vm:
+        name: "dpanel-gcp-01"
+        region: "asia-southeast2"
+        zone: "asia-southeast2-a"
+        machine_type: "e2-medium"
+        source_image: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64"
+        disk_size_gb: 20
+        username: "dpanel"
+        public_key: "{{ dpanel_ssh_public_key }}"
+        # Optional. Prefer a subnetwork selfLink from dPanel's GCP network
+        # discovery endpoint. If omitted, the role targets the default VPC.
+        subnetwork: "https://www.googleapis.com/compute/v1/projects/my-gcp-project/regions/asia-southeast2/subnetworks/default"
+        reserve_public_ip: true
+        labels:
+          managed-by: dpanel
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The generic GCP `vm` resource is an alias adapter over the existing
+`gcp/compute-engine` implementation. It translates dPanel's provider-neutral VM
+payload into `cloud_provider_resource_detail.compute_instance`, runs the
+Compute Engine task path, then writes GCP VM creation output to `output_gcp_vm`
+and `output_vm` when `with_output: true`. Each output item is keyed by VM name
+and includes the provider, `id`/`instance_id`, `name`, `zone`, `region`,
+`public_ip`/`public_ipv4` and `private_ip`/`private_ipv4` when Compute Engine
+returns those values. dPanel uses the generic `output_vm` object to record the
+provider instance relation and then run the normal machine setup playbook.
+
+GCP SSH access uses instance metadata. dPanel passes the selected SSH secret's
+public key as `vm.public_key`, and the role writes `username:public_key` to the
+`ssh-keys` metadata entry before creating the instance. `reserve_public_ip: false`
+omits `access_configs` from the network interface so the VM is private-only.
+
+Deletion uses the same role with `state: absent` and requires `vm.name` plus
+`vm.zone`.
 
 ### IDCloudHost VM example
 

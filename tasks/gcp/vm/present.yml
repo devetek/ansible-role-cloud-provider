@@ -1,0 +1,242 @@
+---
+- name: Create GCP VM through Compute Engine alias
+  block:
+    - name: Normalize GCP VM request
+      ansible.builtin.set_fact:
+        gcp_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize GCP VM fields
+      ansible.builtin.set_fact:
+        gcp_vm_name: "{{ gcp_vm.name | default(gcp_vm.vm_name | default('')) }}"
+        gcp_vm_zone: "{{ gcp_vm.zone | default(gcp_vm.region_id | default('')) }}"
+        gcp_vm_region: "{{ gcp_vm.region | default('') }}"
+        gcp_vm_machine_type: "{{ gcp_vm.machine_type | default('e2-medium') }}"
+        gcp_vm_source_image: "{{ gcp_vm.source_image | default(gcp_vm.image | default(gcp_vm.image_family | default(''))) }}"
+        gcp_vm_disk_size_gb: "{{ gcp_vm.disk_size_gb | default(gcp_vm.disk_size | default(gcp_vm.disk | default(20))) }}"
+        gcp_vm_username: "{{ gcp_vm.username | default(gcp_vm.ssh_user | default('dpanel')) }}"
+        gcp_vm_reserve_public_ip: "{{ gcp_vm.reserve_public_ip | default(true) | bool }}"
+
+    - name: Derive GCP region from zone
+      ansible.builtin.set_fact:
+        gcp_vm_region: "{{ gcp_vm_zone | regex_replace('-[a-z]$', '') }}"
+      when: gcp_vm_region | length == 0
+
+    - name: Validate GCP VM create request
+      ansible.builtin.assert:
+        that:
+          - cloud_provider_auth.project_id | default('') | length > 0
+          - gcp_vm_name | length > 0
+          - gcp_vm_zone | length > 0
+          - gcp_vm_machine_type | length > 0
+          - gcp_vm_source_image | length > 0
+          - gcp_vm_username | length > 0
+        fail_msg: "GCP VM creation requires cloud_provider_auth.project_id, vm.name, vm.zone, vm.machine_type, vm.source_image, and vm.username."
+
+    - name: Resolve GCP VM authentication
+      ansible.builtin.include_tasks: gcp/vm/_auth.yml
+
+    - name: Init GCP VM output
+      ansible.builtin.set_fact:
+        output_gcp_vm: {}
+      when: with_output is defined and with_output and output_gcp_vm is not defined
+
+    - name: Normalize GCP VM metadata
+      ansible.builtin.set_fact:
+        gcp_vm_metadata: "{{ gcp_vm.metadata | default({}) }}"
+
+    - name: Read existing GCP metadata SSH keys
+      ansible.builtin.set_fact:
+        gcp_vm_existing_ssh_keys: "{{ (gcp_vm.metadata | default({})).get('ssh-keys', '') }}"
+
+    - name: Inject dPanel SSH key into GCP instance metadata
+      ansible.builtin.set_fact:
+        gcp_vm_metadata: "{{ gcp_vm_metadata | combine({'ssh-keys': ((gcp_vm_existing_ssh_keys ~ '\n') if gcp_vm_existing_ssh_keys | length > 0 else '') ~ gcp_vm_username ~ ':' ~ gcp_vm.public_key}, recursive=True) }}"
+      when: gcp_vm.public_key | default('') | length > 0
+
+    - name: Build GCP boot disk initialize params
+      ansible.builtin.set_fact:
+        gcp_vm_boot_initialize_params:
+          source_image: "{{ gcp_vm_source_image }}"
+          disk_size_gb: "{{ gcp_vm_disk_size_gb | int }}"
+
+    - name: Apply GCP boot disk type
+      ansible.builtin.set_fact:
+        gcp_vm_boot_initialize_params: "{{ gcp_vm_boot_initialize_params | combine({'disk_type': gcp_vm.disk_type}, recursive=True) }}"
+      when: gcp_vm.disk_type | default('') | length > 0
+
+    - name: Build GCP boot disk
+      ansible.builtin.set_fact:
+        gcp_vm_boot_disk:
+          auto_delete: "{{ gcp_vm.auto_delete_boot_disk | default(true) | bool }}"
+          boot: true
+          initialize_params: "{{ gcp_vm_boot_initialize_params }}"
+
+    - name: Normalize GCP disks
+      ansible.builtin.set_fact:
+        gcp_vm_disks: "{{ gcp_vm.disks | default([gcp_vm_boot_disk]) }}"
+
+    - name: Init GCP network interface
+      ansible.builtin.set_fact:
+        gcp_vm_network_interface: {}
+
+    - name: Use requested GCP network
+      ansible.builtin.set_fact:
+        gcp_vm_network_interface: "{{ gcp_vm_network_interface | combine({'network': {'selfLink': gcp_vm.network}}, recursive=True) }}"
+      when: gcp_vm.network | default('') | length > 0
+
+    - name: Use requested GCP subnetwork
+      ansible.builtin.set_fact:
+        gcp_vm_network_interface: "{{ gcp_vm_network_interface | combine({'subnetwork': {'selfLink': gcp_vm.subnetwork}}, recursive=True) }}"
+      when: gcp_vm.subnetwork | default('') | length > 0
+
+    - name: Use default GCP network when no network is selected
+      ansible.builtin.set_fact:
+        gcp_vm_network_interface: "{{ gcp_vm_network_interface | combine({'network': {'selfLink': 'https://www.googleapis.com/compute/v1/projects/' ~ cloud_provider_auth.project_id ~ '/global/networks/default'}}, recursive=True) }}"
+      when:
+        - gcp_vm.network | default('') | length == 0
+        - gcp_vm.subnetwork | default('') | length == 0
+
+    - name: Init GCP access config
+      ansible.builtin.set_fact:
+        gcp_vm_access_config:
+          name: External NAT
+          type: ONE_TO_ONE_NAT
+
+    - name: Apply requested GCP static public IP
+      ansible.builtin.set_fact:
+        gcp_vm_access_config: "{{ gcp_vm_access_config | combine({'nat_ip': gcp_vm.nat_ip | default(gcp_vm.public_ip)}, recursive=True) }}"
+      when: gcp_vm.nat_ip | default(gcp_vm.public_ip | default('')) | length > 0
+
+    - name: Apply requested GCP network tier
+      ansible.builtin.set_fact:
+        gcp_vm_access_config: "{{ gcp_vm_access_config | combine({'network_tier': gcp_vm.network_tier}, recursive=True) }}"
+      when: gcp_vm.network_tier | default('') | length > 0
+
+    - name: Enable GCP public IP allocation
+      ansible.builtin.set_fact:
+        gcp_vm_network_interface: "{{ gcp_vm_network_interface | combine({'access_configs': [gcp_vm_access_config]}, recursive=True) }}"
+      when: gcp_vm_reserve_public_ip
+
+    - name: Normalize GCP network interfaces
+      ansible.builtin.set_fact:
+        gcp_vm_network_interfaces: "{{ gcp_vm.network_interfaces | default([gcp_vm_network_interface]) }}"
+
+    - name: Build GCP Compute Engine alias detail
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail:
+          name: "{{ gcp_vm_name }}"
+          zone: "{{ gcp_vm_zone }}"
+          machine_type: "{{ gcp_vm_machine_type }}"
+          disks: "{{ gcp_vm_disks }}"
+          metadata: "{{ gcp_vm_metadata }}"
+          network_interfaces: "{{ gcp_vm_network_interfaces }}"
+
+    - name: Apply optional GCP Compute Engine tags
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'tags': gcp_vm.tags}, recursive=True) }}"
+      when: gcp_vm.tags is defined
+
+    - name: Apply optional GCP Compute Engine scopes
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'scopes': gcp_vm.scopes}, recursive=True) }}"
+      when: gcp_vm.scopes is defined
+
+    - name: Apply optional GCP Compute Engine scheduling
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'scheduling': gcp_vm.scheduling}, recursive=True) }}"
+      when: gcp_vm.scheduling is defined
+
+    - name: Apply optional GCP Compute Engine can_ip_forward
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'can_ip_forward': gcp_vm.can_ip_forward}, recursive=True) }}"
+      when: gcp_vm.can_ip_forward is defined
+
+    - name: Apply optional GCP Compute Engine min_cpu_platform
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'min_cpu_platform': gcp_vm.min_cpu_platform}, recursive=True) }}"
+      when: gcp_vm.min_cpu_platform is defined
+
+    - name: Apply optional GCP Compute Engine confidential instance config
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'confidential_instance_config': gcp_vm.confidential_instance_config}, recursive=True) }}"
+      when: gcp_vm.confidential_instance_config is defined
+
+    - name: Apply optional GCP Compute Engine labels
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'labels': gcp_vm.labels}, recursive=True) }}"
+      when: gcp_vm.labels is defined
+
+    - name: Apply optional GCP Compute Engine shielded instance config
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'shielded_instance_config': gcp_vm.shielded_instance_config}, recursive=True) }}"
+      when: gcp_vm.shielded_instance_config is defined
+
+    - name: Apply optional GCP Compute Engine service accounts
+      ansible.builtin.set_fact:
+        gcp_compute_instance_detail: "{{ gcp_compute_instance_detail | combine({'service_accounts': gcp_vm.service_accounts}, recursive=True) }}"
+      when: gcp_vm.service_accounts is defined
+
+    - name: Alias generic GCP VM payload to Compute Engine detail
+      ansible.builtin.set_fact:
+        cloud_provider_auth: "{{ cloud_provider_auth | combine({'service_acount_token': gcp_service_account_file}, recursive=True) }}"
+        cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'compute_instance': gcp_compute_instance_detail}, recursive=True) }}"
+
+    - name: Run GCP Compute Engine implementation for VM alias
+      ansible.builtin.include_tasks: gcp/compute-engine/present.yml
+
+    - name: Read GCP VM alias output
+      ansible.builtin.set_fact:
+        gcp_compute_instance_alias_output: "{{ output_compute_instance[gcp_vm_name] | default({}) }}"
+
+    - name: Normalize GCP network output
+      ansible.builtin.set_fact:
+        gcp_vm_network_output: "{{ (gcp_compute_instance_alias_output.networkInterfaces | default(gcp_compute_instance_alias_output.network_interfaces | default([])) | first) | default({}) }}"
+
+    - name: Normalize GCP access config output
+      ansible.builtin.set_fact:
+        gcp_vm_access_config_output: "{{ (gcp_vm_network_output.get('accessConfigs', gcp_vm_network_output.get('access_configs', [])) | first) | default({}) }}"
+
+    - name: Normalize GCP VM IP output
+      ansible.builtin.set_fact:
+        gcp_vm_public_ip: "{{ gcp_vm_access_config_output.get('natIP', gcp_vm_access_config_output.get('nat_ip', '')) }}"
+        gcp_vm_private_ip: "{{ gcp_vm_network_output.get('networkIP', gcp_vm_network_output.get('network_ip', '')) }}"
+
+    - name: Normalize GCP VM alias result
+      ansible.builtin.set_fact:
+        gcp_vm_result: >-
+          {{
+            gcp_compute_instance_alias_output
+            | combine(
+                {
+                  'provider': 'gcp',
+                  'id': gcp_compute_instance_alias_output.id | default(gcp_compute_instance_alias_output.selfLink | default('')),
+                  'instance_id': gcp_compute_instance_alias_output.id | default(gcp_compute_instance_alias_output.selfLink | default('')),
+                  'provider_instance_id': gcp_compute_instance_alias_output.id | default(gcp_compute_instance_alias_output.selfLink | default('')),
+                  'name': gcp_vm_name,
+                  'instance_name': gcp_vm_name,
+                  'zone': gcp_vm_zone,
+                  'region': gcp_vm_region,
+                  'region_id': gcp_vm_zone,
+                  'machine_type': gcp_vm_machine_type,
+                  'public_ip': gcp_vm_public_ip,
+                  'public_ipv4': gcp_vm_public_ip,
+                  'private_ip': gcp_vm_private_ip,
+                  'private_ipv4': gcp_vm_private_ip,
+                  'reserve_public_ip': gcp_vm_reserve_public_ip
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Set GCP VM alias output
+      ansible.builtin.set_fact:
+        output_gcp_vm: "{{ output_gcp_vm | default({}) | combine({ gcp_vm_name: gcp_vm_result }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ gcp_vm_name: gcp_vm_result }, recursive=True) }}"
+      when: with_output is defined and with_output
+  always:
+    - name: Remove temporary GCP service account file
+      ansible.builtin.file:
+        path: "{{ gcp_service_account_temp.path }}"
+        state: absent
+      when: gcp_service_account_temp.path is defined
+      no_log: true
