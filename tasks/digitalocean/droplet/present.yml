@@ -1,4 +1,9 @@
 ---
+- name: Resolve DigitalOcean Droplet request
+  ansible.builtin.set_fact:
+    digitalocean_droplet: "{{ digitalocean_droplet_request | default(cloud_provider_resource_detail.droplet | default({})) }}"
+  no_log: true
+
 - name: Validate DigitalOcean Droplet create or update input
   ansible.builtin.assert:
     that:
@@ -13,7 +18,6 @@
 - name: Set DigitalOcean Droplet variables
   ansible.builtin.set_fact:
     digitalocean_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token)) }}"
-    digitalocean_droplet: "{{ digitalocean_droplet_request | default(cloud_provider_resource_detail.droplet | default({})) }}"
     digitalocean_droplet_name: "{{ digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default('')) }}"
     digitalocean_droplet_region: "{{ digitalocean_droplet.region | default(digitalocean_droplet.region_id | default('')) }}"
     digitalocean_droplet_size: "{{ digitalocean_droplet.size | default(digitalocean_droplet.plan | default('')) }}"
