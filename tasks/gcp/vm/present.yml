@@ -35,6 +35,9 @@
     - name: Resolve GCP VM authentication
       ansible.builtin.include_tasks: gcp/vm/_auth.yml
 
+    - name: Prepare GCP Python dependencies for VM alias
+      ansible.builtin.include_tasks: gcp/_python_dependencies.yml
+
     - name: Init GCP VM output
       ansible.builtin.set_fact:
         output_gcp_vm: {}

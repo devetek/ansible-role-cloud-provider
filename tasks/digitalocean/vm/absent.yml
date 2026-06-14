@@ -18,6 +18,9 @@
           - digitalocean_vm_droplet_id | string | length > 0 or (digitalocean_vm_name | length > 0 and digitalocean_vm_region | length > 0)
         fail_msg: "DigitalOcean VM deletion requires auth.token and vm.droplet_id, or vm.name with vm.region."
 
+    - name: Prepare DigitalOcean Python dependencies for VM alias deletion
+      ansible.builtin.include_tasks: digitalocean/_python_dependencies.yml
+
     - name: Build DigitalOcean Droplet delete alias detail
       ansible.builtin.set_fact:
         digitalocean_droplet_detail:

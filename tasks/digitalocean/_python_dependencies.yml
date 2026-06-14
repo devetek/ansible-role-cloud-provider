@@ -1,0 +1,23 @@
+---
+- name: Use Ansible runtime Python for DigitalOcean modules
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    digitalocean_python_interpreter: "{{ ansible_playbook_python }}"
+
+- name: Check DigitalOcean Python dependencies
+  ansible.builtin.command: "{{ digitalocean_python_interpreter }} -c 'import azure.core, boto3, pydo'"
+  register: digitalocean_python_dependencies_check
+  changed_when: false
+  failed_when: false
+
+- name: Install DigitalOcean Python dependencies
+  ansible.builtin.command: "{{ digitalocean_python_interpreter }} -m pip install azure-core==1.26.1 boto3==1.28.53 pydo==0.1.7"
+  register: digitalocean_python_dependencies_install
+  changed_when: "'Successfully installed' in (digitalocean_python_dependencies_install.stdout | default(''))"
+  environment:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  when: digitalocean_python_dependencies_check.rc != 0
+
+- name: Validate DigitalOcean Python dependencies
+  ansible.builtin.command: "{{ digitalocean_python_interpreter }} -c 'import azure.core, boto3, pydo'"
+  changed_when: false

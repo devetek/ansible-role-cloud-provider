@@ -22,6 +22,9 @@
           - digitalocean_vm_image | length > 0
         fail_msg: "DigitalOcean VM creation requires auth.token, vm.name, vm.region, vm.size, and vm.image."
 
+    - name: Prepare DigitalOcean Python dependencies for VM alias
+      ansible.builtin.include_tasks: digitalocean/_python_dependencies.yml
+
     - name: Build DigitalOcean Droplet alias detail
       ansible.builtin.set_fact:
         digitalocean_droplet_detail:
