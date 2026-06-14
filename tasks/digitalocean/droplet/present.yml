@@ -3,26 +3,26 @@
   ansible.builtin.assert:
     that:
       - cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token | default(''))) | length > 0
-      - cloud_provider_resource_detail.droplet is defined
-      - (cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name | default(''))) | length > 0
-      - (cloud_provider_resource_detail.droplet.region | default(cloud_provider_resource_detail.droplet.region_id | default(''))) | length > 0
-      - (cloud_provider_resource_detail.droplet.size | default(cloud_provider_resource_detail.droplet.plan | default(''))) | length > 0
-      - (cloud_provider_resource_detail.droplet.image | default(cloud_provider_resource_detail.droplet.image_slug | default(cloud_provider_resource_detail.droplet.source_image | default('')))) | length > 0
+      - digitalocean_droplet | length > 0
+      - (digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default(''))) | length > 0
+      - (digitalocean_droplet.region | default(digitalocean_droplet.region_id | default(''))) | length > 0
+      - (digitalocean_droplet.size | default(digitalocean_droplet.plan | default(''))) | length > 0
+      - (digitalocean_droplet.image | default(digitalocean_droplet.image_slug | default(digitalocean_droplet.source_image | default('')))) | length > 0
     fail_msg: "DigitalOcean droplet creation requires auth.token and droplet name, region, size, and image."
 
 - name: Set DigitalOcean Droplet variables
   ansible.builtin.set_fact:
     digitalocean_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token)) }}"
-    digitalocean_droplet: "{{ cloud_provider_resource_detail.droplet }}"
-    digitalocean_droplet_name: "{{ cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name) }}"
-    digitalocean_droplet_region: "{{ cloud_provider_resource_detail.droplet.region | default(cloud_provider_resource_detail.droplet.region_id) }}"
-    digitalocean_droplet_size: "{{ cloud_provider_resource_detail.droplet.size | default(cloud_provider_resource_detail.droplet.plan) }}"
-    digitalocean_droplet_image: "{{ cloud_provider_resource_detail.droplet.image | default(cloud_provider_resource_detail.droplet.image_slug | default(cloud_provider_resource_detail.droplet.source_image)) }}"
-    digitalocean_droplet_ssh_keys_requested: "{{ cloud_provider_resource_detail.droplet.ssh_keys | default([]) }}"
-    digitalocean_droplet_public_key: "{{ cloud_provider_resource_detail.droplet.public_key | default((cloud_provider_resource_detail.droplet.public_keys | default([''])) | first) }}"
-    digitalocean_droplet_ssh_key_name: "{{ cloud_provider_resource_detail.droplet.ssh_key_name | default('dpanel-' ~ (cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name)) ~ '-key') }}"
-    digitalocean_droplet_timeout: "{{ [cloud_provider_resource_detail.droplet.timeout | default(cloud_provider_auth.vm_timeout | default(digitalocean_vm_default_timeout | default(600))) | int, 1] | max }}"
-    digitalocean_droplet_resize_requested: "{{ cloud_provider_resource_detail.droplet.resize | default(false) | bool }}"
+    digitalocean_droplet: "{{ digitalocean_droplet_request | default(cloud_provider_resource_detail.droplet | default({})) }}"
+    digitalocean_droplet_name: "{{ digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default('')) }}"
+    digitalocean_droplet_region: "{{ digitalocean_droplet.region | default(digitalocean_droplet.region_id | default('')) }}"
+    digitalocean_droplet_size: "{{ digitalocean_droplet.size | default(digitalocean_droplet.plan | default('')) }}"
+    digitalocean_droplet_image: "{{ digitalocean_droplet.image | default(digitalocean_droplet.image_slug | default(digitalocean_droplet.source_image | default(''))) }}"
+    digitalocean_droplet_ssh_keys_requested: "{{ digitalocean_droplet.ssh_keys | default([]) }}"
+    digitalocean_droplet_public_key: "{{ digitalocean_droplet.public_key | default((digitalocean_droplet.public_keys | default([''])) | first) }}"
+    digitalocean_droplet_ssh_key_name: "{{ digitalocean_droplet.ssh_key_name | default('dpanel-' ~ (digitalocean_droplet.name | default(digitalocean_droplet.vm_name)) ~ '-key') }}"
+    digitalocean_droplet_timeout: "{{ [digitalocean_droplet.timeout | default(cloud_provider_auth.vm_timeout | default(digitalocean_vm_default_timeout | default(600))) | int, 1] | max }}"
+    digitalocean_droplet_resize_requested: "{{ digitalocean_droplet.resize | default(false) | bool }}"
   no_log: true
 
 - name: Ensure DigitalOcean SSH key exists from public key

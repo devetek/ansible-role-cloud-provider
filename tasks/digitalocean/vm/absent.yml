@@ -39,7 +39,7 @@
 
     - name: Alias generic VM delete payload to DigitalOcean Droplet detail
       ansible.builtin.set_fact:
-        cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'droplet': digitalocean_droplet_detail}, recursive=True) }}"
+        digitalocean_droplet_request: "{{ digitalocean_droplet_detail }}"
 
     - name: Run DigitalOcean Droplet implementation for VM alias deletion
       ansible.builtin.include_tasks: digitalocean/droplet/absent.yml
