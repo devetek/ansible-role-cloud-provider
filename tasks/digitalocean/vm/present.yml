@@ -1,0 +1,96 @@
+---
+- name: Create DigitalOcean VM through Droplet alias
+  block:
+    - name: Normalize DigitalOcean VM request
+      ansible.builtin.set_fact:
+        digitalocean_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize DigitalOcean VM fields
+      ansible.builtin.set_fact:
+        digitalocean_vm_name: "{{ digitalocean_vm.name | default(digitalocean_vm.vm_name | default('')) }}"
+        digitalocean_vm_region: "{{ digitalocean_vm.region | default(digitalocean_vm.region_id | default('')) }}"
+        digitalocean_vm_size: "{{ digitalocean_vm.size | default(digitalocean_vm.plan | default('')) }}"
+        digitalocean_vm_image: "{{ digitalocean_vm.image | default(digitalocean_vm.image_slug | default(digitalocean_vm.source_image | default(''))) }}"
+
+    - name: Validate DigitalOcean VM create or update request
+      ansible.builtin.assert:
+        that:
+          - cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token | default(''))) | length > 0
+          - digitalocean_vm_name | length > 0
+          - digitalocean_vm_region | length > 0
+          - digitalocean_vm_size | length > 0
+          - digitalocean_vm_image | length > 0
+        fail_msg: "DigitalOcean VM creation requires auth.token, vm.name, vm.region, vm.size, and vm.image."
+
+    - name: Build DigitalOcean Droplet alias detail
+      ansible.builtin.set_fact:
+        digitalocean_droplet_detail:
+          name: "{{ digitalocean_vm_name }}"
+          region: "{{ digitalocean_vm_region }}"
+          size: "{{ digitalocean_vm_size }}"
+          image: "{{ digitalocean_vm_image }}"
+
+    - name: Apply optional DigitalOcean Droplet alias fields
+      ansible.builtin.set_fact:
+        digitalocean_droplet_detail: "{{ digitalocean_droplet_detail | combine({ item: digitalocean_vm[item] }, recursive=True) }}"
+      loop:
+        - droplet_id
+        - ssh_keys
+        - public_key
+        - public_keys
+        - ssh_key_name
+        - backups
+        - ipv6
+        - monitoring
+        - resize
+        - resize_disk
+        - with_droplet_agent
+        - tags
+        - user_data
+        - volumes
+        - vpc_uuid
+        - timeout
+        - module_override_options
+      when: digitalocean_vm[item] is defined
+      no_log: true
+
+    - name: Alias generic VM payload to DigitalOcean Droplet detail
+      ansible.builtin.set_fact:
+        cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'droplet': digitalocean_droplet_detail}, recursive=True) }}"
+
+    - name: Run DigitalOcean Droplet implementation for VM alias
+      ansible.builtin.include_tasks: digitalocean/droplet/present.yml
+
+    - name: Read DigitalOcean Droplet alias output
+      ansible.builtin.set_fact:
+        digitalocean_droplet_alias_output: "{{ output_digitalocean_droplet[digitalocean_vm_name] | default({}) }}"
+
+    - name: Normalize DigitalOcean VM alias result
+      ansible.builtin.set_fact:
+        digitalocean_vm_result: >-
+          {{
+            digitalocean_droplet_alias_output
+            | combine(
+                {
+                  'provider': 'digitalocean',
+                  'name': digitalocean_vm_name,
+                  'vm_name': digitalocean_vm_name,
+                  'instance_name': digitalocean_vm_name,
+                  'region': digitalocean_vm_region,
+                  'region_id': digitalocean_vm_region,
+                  'size': digitalocean_vm_size,
+                  'image': digitalocean_vm_image,
+                  'id': digitalocean_droplet_alias_output.id | default(''),
+                  'droplet_id': digitalocean_droplet_alias_output.id | default(''),
+                  'instance_id': digitalocean_droplet_alias_output.id | default(''),
+                  'provider_instance_id': digitalocean_droplet_alias_output.id | default('')
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Set DigitalOcean VM alias output
+      ansible.builtin.set_fact:
+        output_digitalocean_vm: "{{ output_digitalocean_vm | default({}) | combine({ digitalocean_vm_name: digitalocean_vm_result }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ digitalocean_vm_name: digitalocean_vm_result }, recursive=True) }}"
+      when: with_output is defined and with_output

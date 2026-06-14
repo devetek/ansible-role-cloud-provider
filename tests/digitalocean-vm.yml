@@ -1,0 +1,23 @@
+---
+- name: Syntax check DigitalOcean Droplet VM role path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    state: present
+    with_output: true
+    cloud_provider: digitalocean
+    cloud_provider_auth:
+      token: test-token
+    cloud_provider_resource_type:
+      - vm
+    cloud_provider_resource_detail:
+      vm:
+        name: dpanel-do-test
+        region: sgp1
+        size: s-1vcpu-1gb
+        image: ubuntu-24-04-x64
+        public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDpanelSyntaxTest dpanel@example
+        tags:
+          - managed-by-dpanel
+  roles:
+    - role: ansible-role-cloud-provider

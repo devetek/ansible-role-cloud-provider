@@ -1,0 +1,71 @@
+---
+- name: Delete DigitalOcean VM through Droplet alias
+  block:
+    - name: Normalize DigitalOcean VM delete request
+      ansible.builtin.set_fact:
+        digitalocean_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize DigitalOcean VM delete fields
+      ansible.builtin.set_fact:
+        digitalocean_vm_name: "{{ digitalocean_vm.name | default(digitalocean_vm.vm_name | default('')) }}"
+        digitalocean_vm_region: "{{ digitalocean_vm.region | default(digitalocean_vm.region_id | default('')) }}"
+        digitalocean_vm_droplet_id: "{{ digitalocean_vm.droplet_id | default(digitalocean_vm.id | default(digitalocean_vm.instance_id | default(''))) }}"
+
+    - name: Validate DigitalOcean VM delete request
+      ansible.builtin.assert:
+        that:
+          - cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token | default(''))) | length > 0
+          - digitalocean_vm_droplet_id | string | length > 0 or (digitalocean_vm_name | length > 0 and digitalocean_vm_region | length > 0)
+        fail_msg: "DigitalOcean VM deletion requires auth.token and vm.droplet_id, or vm.name with vm.region."
+
+    - name: Build DigitalOcean Droplet delete alias detail
+      ansible.builtin.set_fact:
+        digitalocean_droplet_detail:
+          name: "{{ digitalocean_vm_name }}"
+          region: "{{ digitalocean_vm_region }}"
+
+    - name: Apply optional DigitalOcean Droplet delete alias fields
+      ansible.builtin.set_fact:
+        digitalocean_droplet_detail: "{{ digitalocean_droplet_detail | combine({ item: digitalocean_vm[item] }, recursive=True) }}"
+      loop:
+        - droplet_id
+        - id
+        - instance_id
+        - timeout
+      when: digitalocean_vm[item] is defined
+
+    - name: Alias generic VM delete payload to DigitalOcean Droplet detail
+      ansible.builtin.set_fact:
+        cloud_provider_resource_detail: "{{ cloud_provider_resource_detail | combine({'droplet': digitalocean_droplet_detail}, recursive=True) }}"
+
+    - name: Run DigitalOcean Droplet implementation for VM alias deletion
+      ansible.builtin.include_tasks: digitalocean/droplet/absent.yml
+
+    - name: Read DigitalOcean Droplet delete alias output
+      ansible.builtin.set_fact:
+        digitalocean_droplet_delete_alias_output: "{{ output_digitalocean_droplet[digitalocean_vm_name | default(digitalocean_vm_droplet_id | string)] | default({}) }}"
+
+    - name: Normalize DigitalOcean VM delete alias result
+      ansible.builtin.set_fact:
+        digitalocean_vm_delete_result: >-
+          {{
+            digitalocean_droplet_delete_alias_output
+            | combine(
+                {
+                  'deleted': true,
+                  'provider': 'digitalocean',
+                  'name': digitalocean_vm_name | default(digitalocean_droplet_delete_alias_output.name | default('')),
+                  'vm_name': digitalocean_vm_name | default(digitalocean_droplet_delete_alias_output.name | default('')),
+                  'instance_name': digitalocean_vm_name | default(digitalocean_droplet_delete_alias_output.name | default('')),
+                  'region': digitalocean_vm_region | default(digitalocean_droplet_delete_alias_output.region | default('')),
+                  'region_id': digitalocean_vm_region | default(digitalocean_droplet_delete_alias_output.region | default(''))
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Set DigitalOcean VM delete alias output
+      ansible.builtin.set_fact:
+        output_digitalocean_vm: "{{ output_digitalocean_vm | default({}) | combine({ digitalocean_vm_name | default(digitalocean_vm_droplet_id | string): digitalocean_vm_delete_result }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ digitalocean_vm_name | default(digitalocean_vm_droplet_id | string): digitalocean_vm_delete_result }, recursive=True) }}"
+      when: with_output is defined and with_output

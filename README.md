@@ -47,6 +47,15 @@ ansible-galaxy collection list google.cloud
 
 This command will display the installed version and confirm that it's sourced from the custom repository.
 
+### 3. Install `digitalocean.cloud` collection
+
+DigitalOcean droplet support in this role uses the official
+`digitalocean.cloud` collection:
+
+```sh
+ansible-galaxy collection install digitalocean.cloud
+```
+
 Role Variables
 --------------
 
@@ -54,7 +63,7 @@ List of variables in ansible-role-cloud-provider:
 
 ```sh
 ---
-cloud_provider: "gcp" # gcp | idcloudhost | biznetgio
+cloud_provider: "gcp" # gcp | idcloudhost | biznetgio | digitalocean
 cloud_provider_auth: {} # depend on provider
 cloud_provider_resource_type: # array of resource type
   - "global-forwarding-rule"
@@ -265,6 +274,92 @@ Deletion uses the same role with `state: absent` and calls
 instance reference as `cloud_provider_resource_detail.vm.account_id`; if only
 `vm_name` is available, the role tries to resolve the account first.
 
+### DigitalOcean Droplet example (provider native)
+
+```yaml
+---
+- name: Create or update a DigitalOcean Droplet
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "digitalocean"
+    cloud_provider_resource_type:
+      - "droplet"
+    cloud_provider_auth:
+      token: "{{ digitalocean_api_token }}"
+    cloud_provider_resource_detail:
+      droplet:
+        name: "dpanel-do-01"
+        region: "sgp1"
+        size: "s-1vcpu-1gb"
+        image: "ubuntu-24-04-x64"
+        # One of ssh_keys/public_key/public_keys is required.
+        public_key: "{{ dpanel_ssh_public_key }}"
+        tags:
+          - "managed-by-dpanel"
+        monitoring: true
+        ipv6: false
+        backups: false
+        timeout: 600
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The provider-native DigitalOcean resource type is `droplet`. The role calls
+`digitalocean.cloud.droplet` with `state: present` and `unique_name: true`.
+It supports idempotent create/update and will trigger a resize when
+`droplet.resize: true` is set, or when an existing droplet size differs from
+`droplet.size`.
+
+When `with_output: true`, native result data is written to
+`output_digitalocean_droplet` and `output_droplet`, keyed by droplet name.
+
+### DigitalOcean VM example (dPanel extension alias)
+
+```yaml
+---
+- name: Create or update a DigitalOcean VM alias
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "digitalocean"
+    cloud_provider_resource_type:
+      - "vm"
+    cloud_provider_auth:
+      token: "{{ digitalocean_api_token }}"
+    cloud_provider_resource_detail:
+      vm:
+        name: "dpanel-do-01"
+        region: "sgp1"
+        size: "s-1vcpu-1gb"
+        image: "ubuntu-24-04-x64"
+        public_key: "{{ dpanel_ssh_public_key }}"
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The `vm` path is an extension alias for dPanel compatibility. It maps
+`cloud_provider_resource_detail.vm` to the provider-native
+`cloud_provider_resource_detail.droplet`, runs the `droplet` implementation,
+then writes compatibility output to `output_digitalocean_vm` and `output_vm`.
+
+When `with_output: true`, VM alias result data is written to
+`output_digitalocean_vm` and `output_vm`, keyed by droplet name. Each output
+item includes
+`provider`, `id`/`droplet_id`/`instance_id`, `name`, `region`, and normalized
+`public_ip`/`public_ipv4` and `private_ip`/`private_ipv4` fields.
+
+Deletion uses the same role with `state: absent`. You can pass
+`droplet.droplet_id` (preferred) or `droplet.name` with `droplet.region`
+for provider-native mode, and `vm.droplet_id` or `vm.name` with `vm.region`
+for alias mode.
+
 License
 -------
 
@@ -285,3 +380,4 @@ Author Information
 [microsoft.azure]: https://github.com/ansible-collections/azure
 [hetzner.hcloud]: https://github.com/ansible-collections/hetzner.hcloud
 [community.digitalocean]: https://github.com/ansible-collections/community.digitalocean
+[digitalocean.cloud]: https://github.com/digitalocean/ansible-collection
