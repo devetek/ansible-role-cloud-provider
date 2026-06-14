@@ -1,0 +1,194 @@
+---
+- name: Validate DigitalOcean Droplet create or update input
+  ansible.builtin.assert:
+    that:
+      - cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token | default(''))) | length > 0
+      - cloud_provider_resource_detail.droplet is defined
+      - (cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name | default(''))) | length > 0
+      - (cloud_provider_resource_detail.droplet.region | default(cloud_provider_resource_detail.droplet.region_id | default(''))) | length > 0
+      - (cloud_provider_resource_detail.droplet.size | default(cloud_provider_resource_detail.droplet.plan | default(''))) | length > 0
+      - (cloud_provider_resource_detail.droplet.image | default(cloud_provider_resource_detail.droplet.image_slug | default(cloud_provider_resource_detail.droplet.source_image | default('')))) | length > 0
+    fail_msg: "DigitalOcean droplet creation requires auth.token and droplet name, region, size, and image."
+
+- name: Set DigitalOcean Droplet variables
+  ansible.builtin.set_fact:
+    digitalocean_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token)) }}"
+    digitalocean_droplet: "{{ cloud_provider_resource_detail.droplet }}"
+    digitalocean_droplet_name: "{{ cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name) }}"
+    digitalocean_droplet_region: "{{ cloud_provider_resource_detail.droplet.region | default(cloud_provider_resource_detail.droplet.region_id) }}"
+    digitalocean_droplet_size: "{{ cloud_provider_resource_detail.droplet.size | default(cloud_provider_resource_detail.droplet.plan) }}"
+    digitalocean_droplet_image: "{{ cloud_provider_resource_detail.droplet.image | default(cloud_provider_resource_detail.droplet.image_slug | default(cloud_provider_resource_detail.droplet.source_image)) }}"
+    digitalocean_droplet_ssh_keys_requested: "{{ cloud_provider_resource_detail.droplet.ssh_keys | default([]) }}"
+    digitalocean_droplet_public_key: "{{ cloud_provider_resource_detail.droplet.public_key | default((cloud_provider_resource_detail.droplet.public_keys | default([''])) | first) }}"
+    digitalocean_droplet_ssh_key_name: "{{ cloud_provider_resource_detail.droplet.ssh_key_name | default('dpanel-' ~ (cloud_provider_resource_detail.droplet.name | default(cloud_provider_resource_detail.droplet.vm_name)) ~ '-key') }}"
+    digitalocean_droplet_timeout: "{{ [cloud_provider_resource_detail.droplet.timeout | default(cloud_provider_auth.vm_timeout | default(digitalocean_vm_default_timeout | default(600))) | int, 1] | max }}"
+    digitalocean_droplet_resize_requested: "{{ cloud_provider_resource_detail.droplet.resize | default(false) | bool }}"
+  no_log: true
+
+- name: Ensure DigitalOcean SSH key exists from public key
+  digitalocean.cloud.ssh_key:
+    token: "{{ digitalocean_api_token }}"
+    state: present
+    name: "{{ digitalocean_droplet_ssh_key_name }}"
+    public_key: "{{ digitalocean_droplet_public_key }}"
+  register: digitalocean_droplet_ssh_key_result
+  when:
+    - digitalocean_droplet_ssh_keys_requested | length == 0
+    - digitalocean_droplet_public_key | default('') | length > 0
+  no_log: true
+
+- name: Resolve effective DigitalOcean SSH keys
+  ansible.builtin.set_fact:
+    digitalocean_droplet_ssh_keys_effective: "{{ digitalocean_droplet_ssh_keys_requested if digitalocean_droplet_ssh_keys_requested | length > 0 else [digitalocean_droplet_ssh_key_result.ssh_key.id | default(digitalocean_droplet_ssh_key_result.ssh_key.fingerprint | default(''))] }}"
+  no_log: true
+
+- name: Validate DigitalOcean SSH key input
+  ansible.builtin.assert:
+    that:
+      - digitalocean_droplet_ssh_keys_effective | reject('equalto', '') | list | length > 0
+    fail_msg: "DigitalOcean droplet creation requires droplet.ssh_keys or droplet.public_key/droplet.public_keys."
+
+- name: Lookup existing DigitalOcean Droplet by name
+  digitalocean.cloud.droplets_info:
+    token: "{{ digitalocean_api_token }}"
+    name: "{{ digitalocean_droplet_name }}"
+  register: digitalocean_droplet_lookup
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Resolve existing DigitalOcean Droplet in target region
+  ansible.builtin.set_fact:
+    digitalocean_droplet_existing: >-
+      {{
+        (
+          digitalocean_droplet_lookup.droplets
+          | default([])
+          | selectattr('region.slug', 'equalto', digitalocean_droplet_region)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Set DigitalOcean resize behavior
+  ansible.builtin.set_fact:
+    digitalocean_droplet_resize_effective: >-
+      {{
+        digitalocean_droplet_resize_requested
+        or
+        (
+          digitalocean_droplet_existing | length > 0
+          and
+          (digitalocean_droplet_existing.size_slug | default(digitalocean_droplet_existing.size.slug | default(''))) != digitalocean_droplet_size
+        )
+      }}
+
+- name: Build DigitalOcean Droplet module payload
+  ansible.builtin.set_fact:
+    digitalocean_droplet_module_payload:
+      token: "{{ digitalocean_api_token }}"
+      state: present
+      name: "{{ digitalocean_droplet_name }}"
+      region: "{{ digitalocean_droplet_region }}"
+      size: "{{ digitalocean_droplet_size }}"
+      image: "{{ digitalocean_droplet_image }}"
+      ssh_keys: "{{ digitalocean_droplet_ssh_keys_effective }}"
+      unique_name: true
+      timeout: "{{ digitalocean_droplet_timeout }}"
+      resize: "{{ digitalocean_droplet_resize_effective }}"
+
+- name: Add optional DigitalOcean Droplet boolean fields
+  ansible.builtin.set_fact:
+    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ item: digitalocean_droplet[item] | bool }, recursive=True) }}"
+  loop:
+    - backups
+    - ipv6
+    - monitoring
+    - resize_disk
+    - with_droplet_agent
+  when: digitalocean_droplet[item] is defined
+
+- name: Add optional DigitalOcean Droplet create or update fields
+  ansible.builtin.set_fact:
+    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ item: digitalocean_droplet[item] }, recursive=True) }}"
+  loop:
+    - droplet_id
+    - tags
+    - user_data
+    - volumes
+    - vpc_uuid
+    - module_override_options
+  when: digitalocean_droplet[item] is defined
+
+- name: Apply DigitalOcean Droplet desired state
+  digitalocean.cloud.droplet: "{{ digitalocean_droplet_module_payload }}"
+  register: digitalocean_droplet_apply
+  no_log: true
+
+- name: Normalize DigitalOcean Droplet output payload
+  ansible.builtin.set_fact:
+    digitalocean_droplet_result_raw: "{{ digitalocean_droplet_apply.droplet | default({}) }}"
+
+- name: Refresh DigitalOcean Droplet details when provider response is empty
+  digitalocean.cloud.droplets_info:
+    token: "{{ digitalocean_api_token }}"
+    name: "{{ digitalocean_droplet_name }}"
+  register: digitalocean_droplet_refresh
+  changed_when: false
+  when: digitalocean_droplet_result_raw | length == 0
+  failed_when: false
+  no_log: true
+
+- name: Resolve refreshed DigitalOcean Droplet output payload
+  ansible.builtin.set_fact:
+    digitalocean_droplet_result_raw: >-
+      {{
+        (
+          digitalocean_droplet_refresh.droplets
+          | default([])
+          | selectattr('region.slug', 'equalto', digitalocean_droplet_region)
+          | list
+          | first
+          | default({})
+        )
+      }}
+  when: digitalocean_droplet_result_raw | length == 0
+
+- name: Resolve DigitalOcean Droplet network outputs
+  ansible.builtin.set_fact:
+    digitalocean_droplet_public_ip: "{{ ((digitalocean_droplet_result_raw.networks.v4 | default([])) | selectattr('type', 'equalto', 'public') | map(attribute='ip_address') | list | first) | default('') }}"
+    digitalocean_droplet_private_ip: "{{ ((digitalocean_droplet_result_raw.networks.v4 | default([])) | selectattr('type', 'equalto', 'private') | map(attribute='ip_address') | list | first) | default('') }}"
+
+- name: Build normalized DigitalOcean Droplet output
+  ansible.builtin.set_fact:
+    digitalocean_droplet_result: >-
+      {{
+        digitalocean_droplet_result_raw
+        | combine(
+            {
+              'provider': 'digitalocean',
+              'id': digitalocean_droplet_result_raw.id | default(''),
+              'droplet_id': digitalocean_droplet_result_raw.id | default(''),
+              'instance_id': digitalocean_droplet_result_raw.id | default(''),
+              'provider_instance_id': digitalocean_droplet_result_raw.id | default(''),
+              'name': digitalocean_droplet_result_raw.name | default(digitalocean_droplet_name),
+              'region': digitalocean_droplet_result_raw.region.slug | default(digitalocean_droplet_region),
+              'region_id': digitalocean_droplet_result_raw.region.slug | default(digitalocean_droplet_region),
+              'size': digitalocean_droplet_result_raw.size_slug | default(digitalocean_droplet_size),
+              'image': digitalocean_droplet_result_raw.image.slug | default(digitalocean_droplet_result_raw.image.id | default(digitalocean_droplet_image)),
+              'public_ip': digitalocean_droplet_public_ip,
+              'public_ipv4': digitalocean_droplet_public_ip,
+              'private_ip': digitalocean_droplet_private_ip,
+              'private_ipv4': digitalocean_droplet_private_ip,
+              'resize': digitalocean_droplet_resize_effective
+            },
+            recursive=True
+          )
+      }}
+
+- name: Set DigitalOcean Droplet output
+  ansible.builtin.set_fact:
+    output_digitalocean_droplet: "{{ output_digitalocean_droplet | default({}) | combine({ digitalocean_droplet_name: digitalocean_droplet_result }, recursive=True) }}"
+    output_droplet: "{{ output_droplet | default({}) | combine({ digitalocean_droplet_name: digitalocean_droplet_result }, recursive=True) }}"
+  when: with_output is defined and with_output

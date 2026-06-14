@@ -1,3 +1,0 @@
----
-- name: Include Proxmox KVM Virtual Machine Management
-  ansible.builtin.include_tasks: "{{ cloud_provider }}/{{ item }}/{{ include_state | default(state) }}.yml"

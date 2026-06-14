@@ -1,4 +1,4 @@
-[WIP] Ansible role: Cloud Provider Creators (GCP / Proxmox / Openstack / AWS / Azure / etc)
+[WIP] Ansible role: Cloud Provider Creators (GCP / AWS / Azure)
 =========
 
 This Ansible role is designed to automate the provisioning, configuration, and management of cloud resources across various cloud providers. It simplifies and streamlines tasks such as creating, updating, and deleting resources like virtual machines, storage, networking, and more.
@@ -19,18 +19,13 @@ This role integrates seamlessly into CI/CD pipelines, enabling automated infrast
 Prerequisites
 ------------
 
-This role relies on specific Ansible collections to interact with various cloud providers. Ensure that the necessary collections are installed and available in your Ansible environment.
-- gooogle.cloud
-- community.proxmox
+This role requires the `google.cloud` Ansible collection to interact with Google Cloud services. Unfortunately, the official `google.cloud` collection has not been updated to support the latest Google Cloud Platform API. Therefore, it is necessary to route the target dependency from a custom Git URL. Install the collection using the following steps:
 
-Install the collection using the following steps:
-
-### 1. Install with CLI or file `requirements.yml`
+### 1. Install `google.cloud` with CLI or file `requirements.yml`
 
 - CLI:
 ```sh
 ansible-galaxy collection install git+https://github.com/prakasa1904/google.cloud.git,master
-ansible-galaxy collection install community.proxmox:1.6.0
 ```
 
 - requirements.yml:
@@ -39,8 +34,6 @@ collections:
   - name: https://github.com/prakasa1904/google.cloud.git
     type: git
     version: master
-  - name: community.proxmox
-    version: 1.6.0
 ```
 Execute command: `ansible-galaxy install -r requirements.yml`
 
@@ -49,10 +42,19 @@ Execute command: `ansible-galaxy install -r requirements.yml`
 After installation, you can verify that the collection is correctly installed by running:
 
 ```sh
-ansible-galaxy collection list
+ansible-galaxy collection list google.cloud
 ```
 
 This command will display the installed version and confirm that it's sourced from the custom repository.
+
+### 3. Install `digitalocean.cloud` collection
+
+DigitalOcean droplet support in this role uses the official
+`digitalocean.cloud` collection:
+
+```sh
+ansible-galaxy collection install digitalocean.cloud
+```
 
 Role Variables
 --------------
@@ -61,7 +63,7 @@ List of variables in ansible-role-cloud-provider:
 
 ```sh
 ---
-cloud_provider: "gcp" # gcp | idcloudhost | biznetgio
+cloud_provider: "gcp" # gcp | idcloudhost | biznetgio | digitalocean
 cloud_provider_auth: {} # depend on provider
 cloud_provider_resource_type: # array of resource type
   - "global-forwarding-rule"
@@ -272,6 +274,92 @@ Deletion uses the same role with `state: absent` and calls
 instance reference as `cloud_provider_resource_detail.vm.account_id`; if only
 `vm_name` is available, the role tries to resolve the account first.
 
+### DigitalOcean Droplet example (provider native)
+
+```yaml
+---
+- name: Create or update a DigitalOcean Droplet
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "digitalocean"
+    cloud_provider_resource_type:
+      - "droplet"
+    cloud_provider_auth:
+      token: "{{ digitalocean_api_token }}"
+    cloud_provider_resource_detail:
+      droplet:
+        name: "dpanel-do-01"
+        region: "sgp1"
+        size: "s-1vcpu-1gb"
+        image: "ubuntu-24-04-x64"
+        # One of ssh_keys/public_key/public_keys is required.
+        public_key: "{{ dpanel_ssh_public_key }}"
+        tags:
+          - "managed-by-dpanel"
+        monitoring: true
+        ipv6: false
+        backups: false
+        timeout: 600
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The provider-native DigitalOcean resource type is `droplet`. The role calls
+`digitalocean.cloud.droplet` with `state: present` and `unique_name: true`.
+It supports idempotent create/update and will trigger a resize when
+`droplet.resize: true` is set, or when an existing droplet size differs from
+`droplet.size`.
+
+When `with_output: true`, native result data is written to
+`output_digitalocean_droplet` and `output_droplet`, keyed by droplet name.
+
+### DigitalOcean VM example (dPanel extension alias)
+
+```yaml
+---
+- name: Create or update a DigitalOcean VM alias
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    with_output: true
+    cloud_provider: "digitalocean"
+    cloud_provider_resource_type:
+      - "vm"
+    cloud_provider_auth:
+      token: "{{ digitalocean_api_token }}"
+    cloud_provider_resource_detail:
+      vm:
+        name: "dpanel-do-01"
+        region: "sgp1"
+        size: "s-1vcpu-1gb"
+        image: "ubuntu-24-04-x64"
+        public_key: "{{ dpanel_ssh_public_key }}"
+
+  roles:
+    - role: dpanel.cloud-provider
+```
+
+The `vm` path is an extension alias for dPanel compatibility. It maps
+`cloud_provider_resource_detail.vm` to the provider-native
+`cloud_provider_resource_detail.droplet`, runs the `droplet` implementation,
+then writes compatibility output to `output_digitalocean_vm` and `output_vm`.
+
+When `with_output: true`, VM alias result data is written to
+`output_digitalocean_vm` and `output_vm`, keyed by droplet name. Each output
+item includes
+`provider`, `id`/`droplet_id`/`instance_id`, `name`, `region`, and normalized
+`public_ip`/`public_ipv4` and `private_ip`/`private_ipv4` fields.
+
+Deletion uses the same role with `state: absent`. You can pass
+`droplet.droplet_id` (preferred) or `droplet.name` with `droplet.region`
+for provider-native mode, and `vm.droplet_id` or `vm.name` with `vm.region`
+for alias mode.
+
 License
 -------
 
@@ -292,3 +380,4 @@ Author Information
 [microsoft.azure]: https://github.com/ansible-collections/azure
 [hetzner.hcloud]: https://github.com/ansible-collections/hetzner.hcloud
 [community.digitalocean]: https://github.com/ansible-collections/community.digitalocean
+[digitalocean.cloud]: https://github.com/digitalocean/ansible-collection
