@@ -17,9 +17,6 @@
       - gcp_compute_instance.network_interfaces is defined
     fail_msg: "GCP Compute Engine creation requires compute_instance.name, compute_instance.zone, compute_instance.disks, and compute_instance.network_interfaces. Use cloud_provider_resource_type: ['vm'] for the generic dPanel VM payload."
 
-- name: Prepare GCP Python dependencies
-  ansible.builtin.include_tasks: gcp/_python_dependencies.yml
-
 - name: Create a Instance (Compute Engine)
   google.cloud.gcp_compute_instance:
     name: "{{ gcp_compute_instance.name }}"

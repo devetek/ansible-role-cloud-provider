@@ -21,6 +21,9 @@
     - name: Resolve GCP VM authentication
       ansible.builtin.include_tasks: gcp/vm/_auth.yml
 
+    - name: Prepare GCP Python dependencies for VM alias deletion
+      ansible.builtin.include_tasks: gcp/_python_dependencies.yml
+
     - name: Alias generic GCP VM delete payload to Compute Engine detail
       ansible.builtin.set_fact:
         cloud_provider_auth: "{{ cloud_provider_auth | combine({'service_acount_token': gcp_service_account_file}, recursive=True) }}"
