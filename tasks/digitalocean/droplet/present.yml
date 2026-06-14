@@ -100,18 +100,20 @@
 
 - name: Add optional DigitalOcean Droplet boolean fields
   ansible.builtin.set_fact:
-    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ item: digitalocean_droplet[item] | bool }, recursive=True) }}"
+    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ digitalocean_boolean_field: digitalocean_droplet[digitalocean_boolean_field] | bool }, recursive=True) }}"
   loop:
     - backups
     - ipv6
     - monitoring
     - resize_disk
     - with_droplet_agent
-  when: digitalocean_droplet[item] is defined
+  loop_control:
+    loop_var: digitalocean_boolean_field
+  when: digitalocean_droplet[digitalocean_boolean_field] is defined
 
 - name: Add optional DigitalOcean Droplet create or update fields
   ansible.builtin.set_fact:
-    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ item: digitalocean_droplet[item] }, recursive=True) }}"
+    digitalocean_droplet_module_payload: "{{ digitalocean_droplet_module_payload | combine({ digitalocean_optional_field: digitalocean_droplet[digitalocean_optional_field] }, recursive=True) }}"
   loop:
     - droplet_id
     - tags
@@ -119,7 +121,9 @@
     - volumes
     - vpc_uuid
     - module_override_options
-  when: digitalocean_droplet[item] is defined
+  loop_control:
+    loop_var: digitalocean_optional_field
+  when: digitalocean_droplet[digitalocean_optional_field] is defined
 
 - name: Apply DigitalOcean Droplet desired state
   digitalocean.cloud.droplet: "{{ digitalocean_droplet_module_payload }}"
