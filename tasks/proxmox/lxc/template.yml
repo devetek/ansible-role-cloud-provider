@@ -1,0 +1,35 @@
+---
+
+- name: Stop a LXC Container
+  community.proxmox.proxmox:
+    # Authentication parameters 
+    api_user: "{{ cloud_provider_auth.api_user }}"
+    api_token_id: "{{ cloud_provider_auth.api_token_id }}"
+    api_token_secret: "{{ cloud_provider_auth.api_token_secret }}"
+    api_host: "{{ cloud_provider_auth.api_host }}"
+    api_timeout: "{{ cloud_provider_auth.api_timeout | default(180) }}"
+    # Authentication parameters
+    
+    # LXC Container parameters
+    vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    timeout: "{{ cloud_provider_resource_detail.timeout | default(180) }}"
+    force: "{{ cloud_provider_resource_detail.force | default(omit) }}"
+    # LXC Container parameters
+    state: stopped
+
+- name: Create a Template from a LXC Container
+  community.proxmox.proxmox:
+    # Authentication parameters 
+    api_user: "{{ cloud_provider_auth.api_user }}"
+    api_token_id: "{{ cloud_provider_auth.api_token_id }}"
+    api_token_secret: "{{ cloud_provider_auth.api_token_secret }}"
+    api_host: "{{ cloud_provider_auth.api_host }}"
+    api_timeout: "{{ cloud_provider_auth.api_timeout | default(180) }}"
+    # Authentication parameters
+    
+    # LXC Container parameters
+    vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    timeout: "{{ cloud_provider_resource_detail.timeout | default(180) }}"
+    force: "{{ cloud_provider_resource_detail.force | default(omit) }}"
+    # LXC Container parameters
+    state: template

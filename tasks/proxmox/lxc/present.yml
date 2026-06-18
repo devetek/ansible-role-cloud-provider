@@ -1,0 +1,58 @@
+---
+- name: Init LXC Output
+  ansible.builtin.set_fact:
+    output_lxc: null
+  when: with_output is defined and with_output and output_lxc is not defined
+
+- name: Create a LXC Container
+  community.proxmox.proxmox:
+    # Authentication parameters
+    api_user: "{{ cloud_provider_auth.api_user }}"
+    api_token_id: "{{ cloud_provider_auth.api_token_id }}"
+    api_token_secret: "{{ cloud_provider_auth.api_token_secret }}"
+    api_host: "{{ cloud_provider_auth.api_host }}"
+    api_timeout: "{{ cloud_provider_auth.api_timeout | default(180) }}"
+    # Authentication parameters
+
+    # LXC Container parameters
+    vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    timeout: "{{ cloud_provider_resource_detail.timeout | default(180) }}"
+    node: "{{ cloud_provider_resource_detail.node }}"
+    hostname: "{{ cloud_provider_resource_detail.hostname }}"
+    description: "{{ cloud_provider_resource_detail.description | default(omit) }}"
+    ostemplate: "{{ cloud_provider_resource_detail.ostemplate }}"
+    password: "{{ cloud_provider_resource_detail.password }}"
+    cores: "{{ cloud_provider_resource_detail.cores }}"
+    memory: "{{ cloud_provider_resource_detail.memory }}"
+    swap: "{{ cloud_provider_resource_detail.swap }}"
+    disk_volume: "{{ cloud_provider_resource_detail.disk_volume }}"
+    netif: "{{ cloud_provider_resource_detail.netif }}"
+    unprivileged: "{{ cloud_provider_resource_detail.unprivileged | default(omit) }}"
+    pubkey: "{{ cloud_provider_resource_detail.pubkey | default(omit) }}"
+    features: "{{ cloud_provider_resource_detail.features | default(omit) }}"
+    timezone: "{{ cloud_provider_resource_detail.timezone | default('host') }}" # Options: host, local, UTC, or any valid timezone string (Europe/Paris)
+    force: "{{ cloud_provider_resource_detail.force | default(omit) }}"
+    tags: "{{ cloud_provider_resource_detail.tags | default(omit) }}"
+    state: present
+    # LXC Container parameters
+  register: lxc_result
+
+- name: Start container
+  community.proxmox.proxmox:
+    # Authentication parameters
+    api_user: "{{ cloud_provider_auth.api_user }}"
+    api_token_id: "{{ cloud_provider_auth.api_token_id }}"
+    api_token_secret: "{{ cloud_provider_auth.api_token_secret }}"
+    api_host: "{{ cloud_provider_auth.api_host }}"
+    api_timeout: "{{ cloud_provider_auth.api_timeout | default(180) }}"
+    # Authentication parameters
+    
+    vmid: "{{ cloud_provider_resource_detail.vmid }}"
+    state: started
+    when: lxc_result.changed
+
+# set_fact to print output globally
+- name: Set LXC Output
+  set_fact:
+    output_lxc: "{{ output_lxc | combine({ cloud_provider_resource_detail.backend_bucket.name : lxc_result }, recursive=True) }}"
+  when: with_output is defined and with_output

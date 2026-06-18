@@ -1,0 +1,54 @@
+---
+- name: Init KVM Output
+  ansible.builtin.set_fact:
+    output_kvm: null
+  when: with_output is defined and with_output and output_kvm is not defined
+
+- name: Create a KVM Virtual Machine
+  community.proxmox.proxmox_kvm:
+    # Authentication parameters 
+    api_user: "{{ cloud_provider_auth.api_user }}"
+    api_token_id: "{{ cloud_provider_auth.api_token_id }}"
+    api_token_secret: "{{ cloud_provider_auth.api_token_secret }}"
+    api_host: "{{ cloud_provider_auth.api_host }}"
+    api_timeout: "{{ cloud_provider_auth.api_timeout | default(180) }}"
+    # Authentication parameters 
+
+    # KVM Virtual Machine parameters
+    timeout: "{{ timeout | default(180) }}"
+    node: "{{ cloud_provider_resource_detail.node }}"
+    name: "{{ cloud_provider_resource_detail.name }}"
+    vmid: "{{ cloud_provider_resource_detail.vmid | default(omit) }}"
+    ide: "{{ cloud_provider_resource_detail.ide | default(omit) }}"
+    ciuser: "{{ cloud_provider_resource_detail.ciuser | default(omit) }}"
+    cipassword: "{{ cloud_provider_resource_detail.cipassword | default(omit) }}"
+    sshkeys: "{{ cloud_provider_resource_detail.sshkeys | default(omit) }}"
+    cpu: "{{ cloud_provider_resource_detail.cpu | default('x86-64-v2-AES') }}"
+    sockets: "{{ cloud_provider_resource_detail.sockets | default(1) }}"
+    cores: "{{ cloud_provider_resource_detail.cores | default(4) }}"
+    memory: "{{ cloud_provider_resource_detail.memory | default(2048) }}"
+    agent: "{{ cloud_provider_resource_detail.agent | default(omit) }}"
+    virtio: "{{ cloud_provider_resource_detail.virtio | default(omit) }}"
+    scsihw: "{{ cloud_provider_resource_detail.scsihw | default('virtio-scsi-single') }}"
+    scsi: "{{ cloud_provider_resource_detail.scsi | default(omit) }}"
+    sata: "{{ cloud_provider_resource_detail.sata | default(omit) }}"
+    net: "{{ cloud_provider_resource_detail.net }}"
+    ipconfig: "{{ cloud_provider_resource_detail.ipconfig | default(omit) }}"
+    tags: "{{ cloud_provider_resource_detail.tags | default(omit) }}"
+    storage: "{{ cloud_provider_resource_detail.storage | default(omit) }}" # Target storage for full clone.
+    onboot: "{{ cloud_provider_resource_detail.onboot | default(omit) }}"
+    ostype: "{{ cloud_provider_resource_detail.ostype | default('l26') }}"
+    protection: "{{ cloud_provider_resource_detail.protection | default(omit) }}"
+    pool: "{{ cloud_provider_resource_detail.pool | default(omit) }}"
+    autostart: "{{ cloud_provider_resource_detail.autostart | default(omit) }}"
+    update: "{{ cloud_provider_resource_detail.update | default(omit) }}"
+    update_unsafe: "{{ cloud_provider_resource_detail.update_unsafe | default(omit) }}"
+    state: present
+    # KVM Virtual Machine parameters
+  register: kvm_result
+
+# set_fact to print output globally
+- name: Set KVM Output
+  set_fact:
+    output_kvm: "{{ output_kvm | combine({ cloud_provider_resource_detail.backend_bucket.name : kvm_result }, recursive=True) }}"
+  when: with_output is defined and with_output
