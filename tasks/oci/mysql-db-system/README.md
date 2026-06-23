@@ -1,0 +1,2 @@
+Ansible Module: https://docs.oracle.com/en-us/iaas/tools/oci-ansible-collection/5.4.0/collections/oracle/oci/oci_mysql_db_system_module.html
+Availability Domain: https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm#About
