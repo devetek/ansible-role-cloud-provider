@@ -238,6 +238,26 @@ When contributing:
 
 ---
 
+# Git Flow
+
+All repository changes must follow a consistent git flow:
+
+- Keep changes scoped to the intended provider or product task.
+- Do not mix unrelated fixes in a single commit.
+- Validate the affected playbooks or task files before committing.
+- Push changes only after confirming they are aligned with the runtime copy used by downstream consumers when applicable.
+- All commit titles must use semantic version commit style (`semrev`).
+
+Examples of accepted commit titles:
+
+```text
+fix: handle digitalocean droplet delete by id
+feat: add gcp compute engine absent task
+refactor: simplify biznetgio vm alias mapping
+```
+
+---
+
 # Contributor Guidelines
 
 Before submitting a PR:
