@@ -1,0 +1,87 @@
+---
+- name: Create AWS VM through EC2 alias
+  block:
+    - name: Normalize AWS VM request
+      ansible.builtin.set_fact:
+        aws_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize AWS VM fields
+      ansible.builtin.set_fact:
+        aws_vm_name: "{{ aws_vm.name | default(aws_vm.vm_name | default('')) }}"
+        aws_vm_region: "{{ aws_vm.region | default(aws_vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
+        aws_vm_image_id: "{{ aws_vm.image_id | default(aws_vm.ami_id | default(aws_vm.image | default(''))) }}"
+        aws_vm_instance_type: "{{ aws_vm.instance_type | default(aws_vm.size | default(aws_vm.machine_type | default(''))) }}"
+
+    - name: Validate AWS VM create request
+      ansible.builtin.assert:
+        that:
+          - ((cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default(''))) | length > 0) or (((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default(''))) | length > 0) and ((cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default(''))) | length > 0))
+          - aws_vm_name | length > 0
+          - aws_vm_region | length > 0
+          - aws_vm_image_id | length > 0
+          - aws_vm_instance_type | length > 0
+        fail_msg: "AWS VM creation requires auth.profile or auth.access_key/auth.secret_key, plus vm.name, vm.region, vm.image_id, and vm.instance_type."
+
+    - name: Build AWS EC2 alias detail
+      ansible.builtin.set_fact:
+        aws_ec2_request:
+          name: "{{ aws_vm_name }}"
+          region: "{{ aws_vm_region }}"
+          image_id: "{{ aws_vm_image_id }}"
+          instance_type: "{{ aws_vm_instance_type }}"
+
+    - name: Apply optional AWS EC2 alias fields
+      ansible.builtin.set_fact:
+        aws_ec2_request: "{{ aws_ec2_request | combine({ aws_alias_field: aws_vm[aws_alias_field] }, recursive=True) }}"
+      loop:
+        - key_name
+        - user_data
+        - vpc_subnet_id
+        - security_group
+        - security_groups
+        - volumes
+        - network
+        - network_interfaces
+        - detailed_monitoring
+        - termination_protection
+        - ebs_optimized
+        - instance_initiated_shutdown_behavior
+        - timeout
+        - tags
+      loop_control:
+        loop_var: aws_alias_field
+      when: aws_vm[aws_alias_field] is defined
+      no_log: true
+
+    - name: Run AWS EC2 implementation for VM alias
+      ansible.builtin.include_tasks: aws/ec2/present.yml
+
+    - name: Read AWS EC2 alias output
+      ansible.builtin.set_fact:
+        aws_ec2_alias_output: "{{ output_aws_ec2[aws_vm_name] | default({}) }}"
+
+    - name: Normalize AWS VM alias result
+      ansible.builtin.set_fact:
+        aws_vm_result: >-
+          {{
+            aws_ec2_alias_output
+            | combine(
+                {
+                  'provider': 'aws',
+                  'name': aws_vm_name,
+                  'vm_name': aws_vm_name,
+                  'instance_name': aws_vm_name,
+                  'region': aws_vm_region,
+                  'region_id': aws_vm_region,
+                  'image_id': aws_ec2_alias_output.image_id | default(aws_vm_image_id),
+                  'instance_type': aws_ec2_alias_output.instance_type | default(aws_vm_instance_type)
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Set AWS VM alias output
+      ansible.builtin.set_fact:
+        output_aws_vm: "{{ output_aws_vm | default({}) | combine({ aws_vm_name: aws_vm_result }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ aws_vm_name: aws_vm_result }, recursive=True) }}"
+      when: with_output is defined and with_output

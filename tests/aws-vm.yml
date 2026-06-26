@@ -1,0 +1,23 @@
+---
+- name: Syntax check AWS EC2 VM role path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    state: present
+    with_output: true
+    cloud_provider: aws
+    cloud_provider_auth:
+      profile: root-bootstrap
+      region: ap-southeast-1
+    cloud_provider_resource_type:
+      - vm
+    cloud_provider_resource_detail:
+      vm:
+        name: dpanel-aws-test
+        region: ap-southeast-1
+        image_id: ami-0123456789abcdef0
+        instance_type: t3.micro
+        tags:
+          managed-by: dpanel
+  roles:
+    - role: ansible-role-cloud-provider

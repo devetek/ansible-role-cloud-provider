@@ -1,0 +1,97 @@
+---
+- name: Resolve AWS EC2 delete request
+  ansible.builtin.set_fact:
+    aws_ec2: "{{ aws_ec2_request | default(cloud_provider_resource_detail.ec2 | default({})) }}"
+  no_log: true
+
+- name: Validate AWS EC2 delete input
+  ansible.builtin.assert:
+    that:
+      - (cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) | length > 0) or ((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) | length > 0) and (cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) | length > 0))
+      - (aws_ec2.instance_id | default(aws_ec2.id | default(aws_ec2.provider_instance_id | default(''))) | string | length > 0) or ((aws_ec2.name | default(aws_ec2.instance_name | default('')) | length > 0) and (aws_ec2.region | default(aws_ec2.region_id | default(cloud_provider_auth.region | default(''))) | length > 0))
+    fail_msg: "AWS EC2 deletion requires auth.profile or auth.access_key/auth.secret_key, plus ec2.instance_id or ec2.name with ec2.region."
+
+- name: Set AWS EC2 delete variables
+  ansible.builtin.set_fact:
+    aws_ec2_name: "{{ aws_ec2.name | default(aws_ec2.instance_name | default('')) }}"
+    aws_ec2_region: "{{ aws_ec2.region | default(aws_ec2.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    aws_ec2_instance_id: "{{ aws_ec2.instance_id | default(aws_ec2.id | default(aws_ec2.provider_instance_id | default(''))) }}"
+    aws_ec2_timeout: "{{ [aws_ec2.timeout | default(cloud_provider_auth.vm_timeout | default(aws_ec2_default_timeout | default(600))) | int, 1] | max }}"
+    aws_ec2_profile: "{{ cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) }}"
+    aws_ec2_access_key: "{{ cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) }}"
+    aws_ec2_secret_key: "{{ cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) }}"
+    aws_ec2_session_token: "{{ cloud_provider_auth.session_token | default(cloud_provider_auth.aws_session_token | default('')) }}"
+  no_log: true
+
+- name: Build AWS EC2 auth arguments for deletion
+  ansible.builtin.set_fact:
+    aws_ec2_auth_args: >-
+      {{
+        {
+          'region': aws_ec2_region
+        }
+        | combine({'profile': aws_ec2_profile}, recursive=True) if aws_ec2_profile | length > 0
+        else {
+          'region': aws_ec2_region,
+          'access_key': aws_ec2_access_key,
+          'secret_key': aws_ec2_secret_key
+        }
+      }}
+  no_log: true
+
+- name: Add optional AWS deletion session token
+  ansible.builtin.set_fact:
+    aws_ec2_auth_args: "{{ aws_ec2_auth_args | combine({'session_token': aws_ec2_session_token}, recursive=True) }}"
+  when: aws_ec2_session_token | length > 0
+  no_log: true
+
+- name: Resolve AWS EC2 instance IDs from name
+  amazon.aws.ec2_instance_info:
+    region: "{{ aws_ec2_region }}"
+    profile: "{{ aws_ec2_profile if aws_ec2_profile | length > 0 else omit }}"
+    access_key: "{{ aws_ec2_access_key if aws_ec2_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_ec2_secret_key if aws_ec2_profile | length == 0 else omit }}"
+    session_token: "{{ aws_ec2_session_token if aws_ec2_session_token | length > 0 else omit }}"
+    filters:
+      tag:Name: "{{ aws_ec2_name }}"
+      instance-state-name:
+        - pending
+        - running
+        - stopping
+        - stopped
+  register: aws_ec2_lookup
+  changed_when: false
+  when:
+    - aws_ec2_instance_id | string | length == 0
+    - aws_ec2_name | string | length > 0
+  no_log: true
+
+- name: Resolve AWS EC2 delete instance IDs
+  ansible.builtin.set_fact:
+    aws_ec2_instance_ids: >-
+      {{
+        [aws_ec2_instance_id]
+        if aws_ec2_instance_id | string | length > 0
+        else (aws_ec2_lookup.instances | default([]) | map(attribute='instance_id') | list)
+      }}
+
+- name: Delete AWS EC2 instances
+  amazon.aws.ec2_instance:
+    region: "{{ aws_ec2_region }}"
+    profile: "{{ aws_ec2_profile if aws_ec2_profile | length > 0 else omit }}"
+    access_key: "{{ aws_ec2_access_key if aws_ec2_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_ec2_secret_key if aws_ec2_profile | length == 0 else omit }}"
+    session_token: "{{ aws_ec2_session_token if aws_ec2_session_token | length > 0 else omit }}"
+    state: absent
+    wait: true
+    wait_timeout: "{{ aws_ec2_timeout }}"
+    instance_ids: "{{ aws_ec2_instance_ids }}"
+  register: aws_ec2_delete
+  when: aws_ec2_instance_ids | length > 0
+  no_log: true
+
+- name: Set AWS EC2 deletion output
+  ansible.builtin.set_fact:
+    output_aws_ec2: "{{ output_aws_ec2 | default({}) | combine({ aws_ec2_name | default((aws_ec2_instance_ids | first | default(''))): {'deleted': true, 'provider': 'aws', 'id': (aws_ec2_instance_ids | first | default('')), 'instance_id': (aws_ec2_instance_ids | first | default('')), 'provider_instance_id': (aws_ec2_instance_ids | first | default('')), 'name': aws_ec2_name | default(''), 'region': aws_ec2_region | default(''), 'region_id': aws_ec2_region | default('')} }, recursive=True) }}"
+    output_ec2: "{{ output_ec2 | default({}) | combine({ aws_ec2_name | default((aws_ec2_instance_ids | first | default(''))): {'deleted': true, 'provider': 'aws', 'id': (aws_ec2_instance_ids | first | default('')), 'instance_id': (aws_ec2_instance_ids | first | default('')), 'provider_instance_id': (aws_ec2_instance_ids | first | default('')), 'name': aws_ec2_name | default(''), 'region': aws_ec2_region | default(''), 'region_id': aws_ec2_region | default('')} }, recursive=True) }}"
+  when: with_output is defined and with_output

@@ -28,3 +28,6 @@ biznetgio_vm_default_wait_delay: 10
 
 # DigitalOcean droplet create/update/delete timeout in seconds.
 digitalocean_vm_default_timeout: 600
+
+# AWS EC2 create/update/delete timeout in seconds.
+aws_ec2_default_timeout: 600

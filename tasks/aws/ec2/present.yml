@@ -1,0 +1,192 @@
+---
+- name: Resolve AWS EC2 create request
+  ansible.builtin.set_fact:
+    aws_ec2: "{{ aws_ec2_request | default(cloud_provider_resource_detail.ec2 | default({})) }}"
+  no_log: true
+
+- name: Validate AWS EC2 create input
+  ansible.builtin.assert:
+    that:
+      - (cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) | length > 0) or ((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) | length > 0) and (cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) | length > 0))
+      - aws_ec2 | length > 0
+      - (aws_ec2.name | default(aws_ec2.instance_name | default(''))) | length > 0
+      - (aws_ec2.region | default(aws_ec2.region_id | default(cloud_provider_auth.region | default('')))) | length > 0
+      - (aws_ec2.image_id | default(aws_ec2.ami_id | default(aws_ec2.image | default('')))) | length > 0
+      - (aws_ec2.instance_type | default(aws_ec2.size | default(aws_ec2.machine_type | default('')))) | length > 0
+    fail_msg: "AWS EC2 creation requires auth.profile or auth.access_key/auth.secret_key, plus ec2 name, region, image_id, and instance_type."
+
+- name: Set AWS EC2 variables
+  ansible.builtin.set_fact:
+    aws_ec2_name: "{{ aws_ec2.name | default(aws_ec2.instance_name | default('')) }}"
+    aws_ec2_region: "{{ aws_ec2.region | default(aws_ec2.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    aws_ec2_image_id: "{{ aws_ec2.image_id | default(aws_ec2.ami_id | default(aws_ec2.image | default(''))) }}"
+    aws_ec2_instance_type: "{{ aws_ec2.instance_type | default(aws_ec2.size | default(aws_ec2.machine_type | default(''))) }}"
+    aws_ec2_timeout: "{{ [aws_ec2.timeout | default(cloud_provider_auth.vm_timeout | default(aws_ec2_default_timeout | default(600))) | int, 1] | max }}"
+    aws_ec2_profile: "{{ cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) }}"
+    aws_ec2_access_key: "{{ cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) }}"
+    aws_ec2_secret_key: "{{ cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) }}"
+    aws_ec2_session_token: "{{ cloud_provider_auth.session_token | default(cloud_provider_auth.aws_session_token | default('')) }}"
+  no_log: true
+
+- name: Build AWS EC2 auth arguments
+  ansible.builtin.set_fact:
+    aws_ec2_auth_args: >-
+      {{
+        {
+          'region': aws_ec2_region
+        }
+        | combine({'profile': aws_ec2_profile}, recursive=True) if aws_ec2_profile | length > 0
+        else {
+          'region': aws_ec2_region,
+          'access_key': aws_ec2_access_key,
+          'secret_key': aws_ec2_secret_key
+        }
+      }}
+  no_log: true
+
+- name: Add optional AWS session token
+  ansible.builtin.set_fact:
+    aws_ec2_auth_args: "{{ aws_ec2_auth_args | combine({'session_token': aws_ec2_session_token}, recursive=True) }}"
+  when: aws_ec2_session_token | length > 0
+  no_log: true
+
+- name: Build AWS EC2 module payload
+  ansible.builtin.set_fact:
+    aws_ec2_module_payload: >-
+      {{
+        aws_ec2_auth_args | combine(
+          {
+            'state': 'started',
+            'wait': true,
+            'wait_timeout': aws_ec2_timeout,
+            'name': aws_ec2_name,
+            'image_id': aws_ec2_image_id,
+            'instance_type': aws_ec2_instance_type,
+            'exact_count': 1,
+            'filters': {
+              'tag:Name': aws_ec2_name,
+              'instance-state-name': ['pending', 'running', 'stopping', 'stopped']
+            },
+            'tags': {'Name': aws_ec2_name}
+          },
+          recursive=True
+        )
+      }}
+  no_log: true
+
+- name: Add optional AWS EC2 create fields
+  ansible.builtin.set_fact:
+    aws_ec2_module_payload: "{{ aws_ec2_module_payload | combine({ aws_ec2_optional_field: aws_ec2[aws_ec2_optional_field] }, recursive=True) }}"
+  loop:
+    - key_name
+    - user_data
+    - vpc_subnet_id
+    - security_group
+    - security_groups
+    - volumes
+    - network
+    - network_interfaces
+    - detailed_monitoring
+    - termination_protection
+    - ebs_optimized
+    - instance_initiated_shutdown_behavior
+  loop_control:
+    loop_var: aws_ec2_optional_field
+  when: aws_ec2[aws_ec2_optional_field] is defined
+  no_log: true
+
+- name: Merge optional AWS EC2 tags
+  ansible.builtin.set_fact:
+    aws_ec2_module_payload: "{{ aws_ec2_module_payload | combine({'tags': aws_ec2_module_payload.tags | combine(aws_ec2.tags)}, recursive=True) }}"
+  when: aws_ec2.tags is defined
+  no_log: true
+
+- name: Apply AWS EC2 desired state
+  amazon.aws.ec2_instance:
+    region: "{{ aws_ec2_region }}"
+    profile: "{{ aws_ec2_profile if aws_ec2_profile | length > 0 else omit }}"
+    access_key: "{{ aws_ec2_access_key if aws_ec2_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_ec2_secret_key if aws_ec2_profile | length == 0 else omit }}"
+    session_token: "{{ aws_ec2_session_token if aws_ec2_session_token | length > 0 else omit }}"
+    state: started
+    wait: true
+    wait_timeout: "{{ aws_ec2_timeout }}"
+    name: "{{ aws_ec2_name }}"
+    image_id: "{{ aws_ec2_image_id }}"
+    instance_type: "{{ aws_ec2_instance_type }}"
+    exact_count: 1
+    filters:
+      tag:Name: "{{ aws_ec2_name }}"
+      instance-state-name:
+        - pending
+        - running
+        - stopping
+        - stopped
+    tags: "{{ {'Name': aws_ec2_name} | combine(aws_ec2.tags | default({})) }}"
+    key_name: "{{ aws_ec2.key_name | default(omit) }}"
+    user_data: "{{ aws_ec2.user_data | default(omit) }}"
+    vpc_subnet_id: "{{ aws_ec2.vpc_subnet_id | default(omit) }}"
+    security_group: "{{ aws_ec2.security_group | default(omit) }}"
+    security_groups: "{{ aws_ec2.security_groups | default(omit) }}"
+    volumes: "{{ aws_ec2.volumes | default(omit) }}"
+    network: "{{ aws_ec2.network | default(omit) }}"
+    network_interfaces: "{{ aws_ec2.network_interfaces | default(omit) }}"
+    detailed_monitoring: "{{ aws_ec2.detailed_monitoring | default(omit) }}"
+    termination_protection: "{{ aws_ec2.termination_protection | default(omit) }}"
+    ebs_optimized: "{{ aws_ec2.ebs_optimized | default(omit) }}"
+    instance_initiated_shutdown_behavior: "{{ aws_ec2.instance_initiated_shutdown_behavior | default(omit) }}"
+  register: aws_ec2_apply
+  no_log: true
+
+- name: Refresh AWS EC2 details
+  amazon.aws.ec2_instance_info:
+    region: "{{ aws_ec2_region }}"
+    profile: "{{ aws_ec2_profile if aws_ec2_profile | length > 0 else omit }}"
+    access_key: "{{ aws_ec2_access_key if aws_ec2_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_ec2_secret_key if aws_ec2_profile | length == 0 else omit }}"
+    session_token: "{{ aws_ec2_session_token if aws_ec2_session_token | length > 0 else omit }}"
+    filters:
+      tag:Name: "{{ aws_ec2_name }}"
+      instance-state-name:
+        - pending
+        - running
+        - stopping
+        - stopped
+  register: aws_ec2_info
+  changed_when: false
+  no_log: true
+
+- name: Resolve AWS EC2 output payload
+  ansible.builtin.set_fact:
+    aws_ec2_result_raw: "{{ (aws_ec2_info.instances | default([]) | first | default((aws_ec2_apply.instances | default([]) | first | default({})))) }}"
+
+- name: Build normalized AWS EC2 output
+  ansible.builtin.set_fact:
+    aws_ec2_result: >-
+      {{
+        aws_ec2_result_raw
+        | combine(
+            {
+              'provider': 'aws',
+              'id': aws_ec2_result_raw.instance_id | default(''),
+              'instance_id': aws_ec2_result_raw.instance_id | default(''),
+              'provider_instance_id': aws_ec2_result_raw.instance_id | default(''),
+              'name': aws_ec2_name,
+              'region': aws_ec2_region,
+              'region_id': aws_ec2_region,
+              'image_id': aws_ec2_result_raw.image_id | default(aws_ec2_image_id),
+              'instance_type': aws_ec2_result_raw.instance_type | default(aws_ec2_instance_type),
+              'public_ip': aws_ec2_result_raw.public_ip_address | default(''),
+              'public_ipv4': aws_ec2_result_raw.public_ip_address | default(''),
+              'private_ip': aws_ec2_result_raw.private_ip_address | default(''),
+              'private_ipv4': aws_ec2_result_raw.private_ip_address | default('')
+            },
+            recursive=True
+          )
+      }}
+
+- name: Set AWS EC2 output
+  ansible.builtin.set_fact:
+    output_aws_ec2: "{{ output_aws_ec2 | default({}) | combine({ aws_ec2_name: aws_ec2_result }, recursive=True) }}"
+    output_ec2: "{{ output_ec2 | default({}) | combine({ aws_ec2_name: aws_ec2_result }, recursive=True) }}"
+  when: with_output is defined and with_output

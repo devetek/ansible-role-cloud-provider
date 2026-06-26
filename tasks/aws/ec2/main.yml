@@ -1,0 +1,3 @@
+---
+- name: Include AWS EC2 management
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ cloud_provider | lower }}/{{ item }}/{{ include_state | default(state) }}.yml"

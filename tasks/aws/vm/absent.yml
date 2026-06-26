@@ -1,0 +1,70 @@
+---
+- name: Delete AWS VM through EC2 alias
+  block:
+    - name: Normalize AWS VM delete request
+      ansible.builtin.set_fact:
+        aws_vm: "{{ cloud_provider_resource_detail.vm | default({}) }}"
+
+    - name: Normalize AWS VM delete fields
+      ansible.builtin.set_fact:
+        aws_vm_name: "{{ aws_vm.name | default(aws_vm.vm_name | default('')) }}"
+        aws_vm_region: "{{ aws_vm.region | default(aws_vm.region_id | default(cloud_provider_auth.region | default(''))) }}"
+        aws_vm_instance_id: "{{ aws_vm.instance_id | default(aws_vm.id | default(aws_vm.provider_instance_id | default(''))) }}"
+
+    - name: Validate AWS VM delete request
+      ansible.builtin.assert:
+        that:
+          - ((cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default(''))) | length > 0) or (((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default(''))) | length > 0) and ((cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default(''))) | length > 0))
+          - (aws_vm_instance_id | string | length > 0) or (aws_vm_name | length > 0 and aws_vm_region | length > 0)
+        fail_msg: "AWS VM deletion requires auth.profile or auth.access_key/auth.secret_key, plus vm.instance_id or vm.name with vm.region."
+
+    - name: Build AWS EC2 delete alias detail
+      ansible.builtin.set_fact:
+        aws_ec2_request:
+          name: "{{ aws_vm_name }}"
+          region: "{{ aws_vm_region }}"
+
+    - name: Apply optional AWS EC2 delete alias fields
+      ansible.builtin.set_fact:
+        aws_ec2_request: "{{ aws_ec2_request | combine({ aws_alias_field: aws_vm[aws_alias_field] }, recursive=True) }}"
+      loop:
+        - instance_id
+        - id
+        - provider_instance_id
+        - timeout
+      loop_control:
+        loop_var: aws_alias_field
+      when: aws_vm[aws_alias_field] is defined
+      no_log: true
+
+    - name: Run AWS EC2 implementation for VM alias deletion
+      ansible.builtin.include_tasks: aws/ec2/absent.yml
+
+    - name: Read AWS EC2 delete alias output
+      ansible.builtin.set_fact:
+        aws_ec2_delete_alias_output: "{{ output_aws_ec2[aws_vm_name | default(aws_vm_instance_id | string)] | default({}) }}"
+
+    - name: Normalize AWS VM delete alias result
+      ansible.builtin.set_fact:
+        aws_vm_delete_result: >-
+          {{
+            aws_ec2_delete_alias_output
+            | combine(
+                {
+                  'deleted': true,
+                  'provider': 'aws',
+                  'name': aws_vm_name | default(aws_ec2_delete_alias_output.name | default('')),
+                  'vm_name': aws_vm_name | default(aws_ec2_delete_alias_output.name | default('')),
+                  'instance_name': aws_vm_name | default(aws_ec2_delete_alias_output.name | default('')),
+                  'region': aws_vm_region | default(aws_ec2_delete_alias_output.region | default('')),
+                  'region_id': aws_vm_region | default(aws_ec2_delete_alias_output.region | default(''))
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Set AWS VM delete alias output
+      ansible.builtin.set_fact:
+        output_aws_vm: "{{ output_aws_vm | default({}) | combine({ aws_vm_name | default(aws_vm_instance_id | string): aws_vm_delete_result }, recursive=True) }}"
+        output_vm: "{{ output_vm | default({}) | combine({ aws_vm_name | default(aws_vm_instance_id | string): aws_vm_delete_result }, recursive=True) }}"
+      when: with_output is defined and with_output
