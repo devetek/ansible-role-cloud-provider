@@ -29,13 +29,15 @@
 
     - name: Apply optional DigitalOcean Droplet delete alias fields
       ansible.builtin.set_fact:
-        digitalocean_droplet_detail: "{{ digitalocean_droplet_detail | combine({ item: digitalocean_vm[item] }, recursive=True) }}"
+        digitalocean_droplet_detail: "{{ digitalocean_droplet_detail | combine({ digitalocean_alias_field: digitalocean_vm[digitalocean_alias_field] }, recursive=True) }}"
       loop:
         - droplet_id
         - id
         - instance_id
         - timeout
-      when: digitalocean_vm[item] is defined
+      loop_control:
+        loop_var: digitalocean_alias_field
+      when: digitalocean_vm[digitalocean_alias_field] is defined
 
     - name: Alias generic VM delete payload to DigitalOcean Droplet detail
       ansible.builtin.set_fact:

@@ -36,10 +36,20 @@
     name: "{{ digitalocean_droplet_ssh_key_name }}"
     public_key: "{{ digitalocean_droplet_public_key }}"
   register: digitalocean_droplet_ssh_key_result
+  failed_when: false
   when:
     - digitalocean_droplet_ssh_keys_requested | length == 0
     - digitalocean_droplet_public_key | default('') | length > 0
   no_log: true
+
+- name: Fail when DigitalOcean SSH key import fails
+  ansible.builtin.fail:
+    msg: >-
+      DigitalOcean SSH key import failed for {{ digitalocean_droplet_ssh_key_name }}.
+      Provider response: {{ digitalocean_droplet_ssh_key_result.msg | default(digitalocean_droplet_ssh_key_result.error.Message | default('empty provider response')) }}
+  when:
+    - digitalocean_droplet_ssh_key_result is defined
+    - digitalocean_droplet_ssh_key_result.failed | default(false)
 
 - name: Resolve effective DigitalOcean SSH keys
   ansible.builtin.set_fact:

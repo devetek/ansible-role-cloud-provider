@@ -9,7 +9,7 @@
     that:
       - cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token | default(''))) | length > 0
       - digitalocean_droplet | length > 0
-      - (digitalocean_droplet.droplet_id | default(digitalocean_droplet.id | default(digitalocean_droplet.instance_id | default(''))) | string | length > 0) or (((digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default(''))) | string | length > 0) and ((digitalocean_droplet.region | default(digitalocean_droplet.region_id | default(''))) | string | length > 0))
+      - (digitalocean_droplet.droplet_id | default(digitalocean_droplet.id | default(digitalocean_droplet.instance_id | default(digitalocean_droplet.uuid | default('')))) | string | length > 0) or (((digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default(''))) | string | length > 0) and ((digitalocean_droplet.region | default(digitalocean_droplet.region_id | default(''))) | string | length > 0))
     fail_msg: "DigitalOcean droplet deletion requires auth.token and droplet.droplet_id/id/instance_id, or droplet.name with droplet.region."
 
 - name: Set DigitalOcean Droplet deletion variables
@@ -17,7 +17,7 @@
     digitalocean_api_token: "{{ cloud_provider_auth.token | default(cloud_provider_auth.api_token | default(cloud_provider_auth.access_token)) }}"
     digitalocean_droplet_name: "{{ digitalocean_droplet.name | default(digitalocean_droplet.vm_name | default('')) }}"
     digitalocean_droplet_region: "{{ digitalocean_droplet.region | default(digitalocean_droplet.region_id | default('')) }}"
-    digitalocean_droplet_id: "{{ digitalocean_droplet.droplet_id | default(digitalocean_droplet.id | default(digitalocean_droplet.instance_id | default(''))) }}"
+    digitalocean_droplet_id: "{{ digitalocean_droplet.droplet_id | default(digitalocean_droplet.id | default(digitalocean_droplet.instance_id | default(digitalocean_droplet.uuid | default('')))) }}"
     digitalocean_droplet_timeout: "{{ [digitalocean_droplet.timeout | default(cloud_provider_auth.vm_timeout | default(digitalocean_vm_default_timeout | default(600))) | int, 1] | max }}"
   no_log: true
 
@@ -57,10 +57,11 @@
     token: "{{ digitalocean_api_token }}"
     state: absent
     droplet_id: "{{ digitalocean_droplet_id | int }}"
+    region: "{{ digitalocean_droplet_region }}"
     timeout: "{{ digitalocean_droplet_timeout }}"
-  register: digitalocean_droplet_delete
+  register: digitalocean_droplet_delete_by_id
   when: digitalocean_droplet_id | string | length > 0
-  failed_when: false
+  ignore_errors: true
   no_log: true
 
 - name: Delete DigitalOcean Droplet by name and region
@@ -71,12 +72,25 @@
     region: "{{ digitalocean_droplet_region }}"
     unique_name: true
     timeout: "{{ digitalocean_droplet_timeout }}"
-  register: digitalocean_droplet_delete
+  register: digitalocean_droplet_delete_by_name
   when:
     - digitalocean_droplet_id | string | length == 0
     - digitalocean_droplet_name | string | length > 0
     - digitalocean_droplet_region | string | length > 0
-  failed_when: false
+  ignore_errors: true
+  no_log: true
+
+- name: Resolve DigitalOcean Droplet deletion result
+  ansible.builtin.set_fact:
+    digitalocean_droplet_delete: >-
+      {{
+        digitalocean_droplet_delete_by_id
+        if (
+          digitalocean_droplet_delete_by_id is defined
+          and not (digitalocean_droplet_delete_by_id.skipped | default(false))
+        )
+        else (digitalocean_droplet_delete_by_name | default({}))
+      }}
   no_log: true
 
 - name: Fail when DigitalOcean Droplet deletion fails
