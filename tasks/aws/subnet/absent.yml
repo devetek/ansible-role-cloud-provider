@@ -1,0 +1,120 @@
+---
+- name: Resolve AWS Subnet delete request
+  ansible.builtin.set_fact:
+    aws_subnet: "{{ aws_subnet_request if (aws_subnet_request is defined and aws_subnet_request | length > 0) else (cloud_provider_resource_detail.subnet | default({})) }}"
+  no_log: true
+
+- name: Validate AWS Subnet delete input
+  ansible.builtin.assert:
+    that:
+      - (cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) | length > 0) or ((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) | length > 0) and (cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) | length > 0))
+      - (aws_subnet.subnet_id | default(aws_subnet.id | default(aws_subnet.provider_resource_id | default(''))) | string | length > 0) or ((aws_subnet.cidr | default(aws_subnet.cidr_block | default('')) | length > 0) and ((aws_subnet.vpc_id | default(aws_subnet.vpc | default(aws_subnet.network_id | default(''))) | string | length > 0) or (aws_subnet.vpc_name | default('') | length > 0)))
+    fail_msg: "AWS Subnet deletion requires auth.profile or auth.access_key/auth.secret_key, plus subnet.subnet_id/id, or subnet.cidr with subnet.vpc_id (or subnet.vpc_name)."
+
+- name: Set AWS Subnet delete variables
+  ansible.builtin.set_fact:
+    aws_subnet_name: "{{ aws_subnet.name | default(aws_subnet.subnet_name | default('')) }}"
+    aws_subnet_region: "{{ aws_subnet.region | default(aws_subnet.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    aws_subnet_id: "{{ aws_subnet.subnet_id | default(aws_subnet.id | default(aws_subnet.provider_resource_id | default(''))) }}"
+    aws_subnet_cidr: "{{ aws_subnet.cidr | default(aws_subnet.cidr_block | default('')) }}"
+    aws_subnet_vpc_id: "{{ aws_subnet.vpc_id | default(aws_subnet.vpc | default(aws_subnet.network_id | default(''))) }}"
+    aws_subnet_vpc_name: "{{ aws_subnet.vpc_name | default('') }}"
+    aws_subnet_profile: "{{ cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) }}"
+    aws_subnet_access_key: "{{ cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) }}"
+    aws_subnet_secret_key: "{{ cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) }}"
+    aws_subnet_session_token: "{{ cloud_provider_auth.session_token | default(cloud_provider_auth.aws_session_token | default('')) }}"
+  no_log: true
+
+- name: Resolve AWS Subnet delete VPC ID from name
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ aws_subnet_region }}"
+    profile: "{{ aws_subnet_profile if aws_subnet_profile | length > 0 else omit }}"
+    access_key: "{{ aws_subnet_access_key if aws_subnet_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_subnet_secret_key if aws_subnet_profile | length == 0 else omit }}"
+    session_token: "{{ aws_subnet_session_token if aws_subnet_session_token | length > 0 else omit }}"
+    filters:
+      tag:Name: "{{ aws_subnet_vpc_name }}"
+  register: aws_subnet_delete_vpc_lookup
+  changed_when: false
+  when:
+    - aws_subnet_id | string | length == 0
+    - aws_subnet_vpc_id | string | length == 0
+    - aws_subnet_vpc_name | string | length > 0
+  no_log: true
+
+- name: Set AWS Subnet delete VPC ID from lookup
+  ansible.builtin.set_fact:
+    aws_subnet_vpc_id: "{{ aws_subnet_delete_vpc_lookup.vpcs | default([]) | map(attribute='id') | list | first | default('') }}"
+  when:
+    - aws_subnet_id | string | length == 0
+    - aws_subnet_vpc_id | string | length == 0
+    - aws_subnet_delete_vpc_lookup is defined
+
+- name: Resolve AWS Subnet ID from CIDR and VPC
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_subnet_region }}"
+    profile: "{{ aws_subnet_profile if aws_subnet_profile | length > 0 else omit }}"
+    access_key: "{{ aws_subnet_access_key if aws_subnet_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_subnet_secret_key if aws_subnet_profile | length == 0 else omit }}"
+    session_token: "{{ aws_subnet_session_token if aws_subnet_session_token | length > 0 else omit }}"
+    filters:
+      vpc-id: "{{ aws_subnet_vpc_id }}"
+      cidr-block: "{{ aws_subnet_cidr }}"
+  register: aws_subnet_lookup
+  changed_when: false
+  when:
+    - aws_subnet_id | string | length == 0
+    - aws_subnet_cidr | string | length > 0
+    - aws_subnet_vpc_id | string | length > 0
+  no_log: true
+
+- name: Set AWS Subnet ID from lookup
+  ansible.builtin.set_fact:
+    aws_subnet_id: "{{ aws_subnet_lookup.subnets | default([]) | map(attribute='subnet_id') | list | first | default('') }}"
+  when:
+    - aws_subnet_id | string | length == 0
+    - aws_subnet_lookup is defined
+
+- name: Resolve AWS Subnet details from subnet ID
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_subnet_region }}"
+    profile: "{{ aws_subnet_profile if aws_subnet_profile | length > 0 else omit }}"
+    access_key: "{{ aws_subnet_access_key if aws_subnet_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_subnet_secret_key if aws_subnet_profile | length == 0 else omit }}"
+    session_token: "{{ aws_subnet_session_token if aws_subnet_session_token | length > 0 else omit }}"
+    subnet_ids:
+      - "{{ aws_subnet_id }}"
+  register: aws_subnet_lookup_by_id
+  changed_when: false
+  when: aws_subnet_id | string | length > 0
+  no_log: true
+
+- name: Set AWS Subnet CIDR and VPC from subnet ID lookup
+  ansible.builtin.set_fact:
+    aws_subnet_cidr: "{{ (aws_subnet_lookup_by_id.subnets | default([]) | first | default({})).cidr_block | default(aws_subnet_cidr) }}"
+    aws_subnet_vpc_id: "{{ (aws_subnet_lookup_by_id.subnets | default([]) | first | default({})).vpc_id | default(aws_subnet_vpc_id) }}"
+  when:
+    - aws_subnet_id | string | length > 0
+    - aws_subnet_lookup_by_id is defined
+
+- name: Delete AWS Subnet
+  amazon.aws.ec2_vpc_subnet:
+    region: "{{ aws_subnet_region }}"
+    profile: "{{ aws_subnet_profile if aws_subnet_profile | length > 0 else omit }}"
+    access_key: "{{ aws_subnet_access_key if aws_subnet_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_subnet_secret_key if aws_subnet_profile | length == 0 else omit }}"
+    session_token: "{{ aws_subnet_session_token if aws_subnet_session_token | length > 0 else omit }}"
+    state: absent
+    vpc_id: "{{ aws_subnet_vpc_id if aws_subnet_vpc_id | length > 0 else omit }}"
+    cidr: "{{ aws_subnet_cidr if aws_subnet_cidr | length > 0 else omit }}"
+  register: aws_subnet_delete_by_cidr
+  when:
+    - aws_subnet_cidr | string | length > 0
+    - aws_subnet_vpc_id | string | length > 0
+  no_log: true
+
+- name: Set AWS Subnet deletion output
+  ansible.builtin.set_fact:
+    output_aws_subnet: "{{ output_aws_subnet | default({}) | combine({ aws_subnet_name | default(aws_subnet_id | default(aws_subnet_cidr)): {'deleted': true, 'provider': 'aws', 'id': aws_subnet_id | default(''), 'subnet_id': aws_subnet_id | default(''), 'provider_resource_id': aws_subnet_id | default(''), 'name': aws_subnet_name | default(''), 'subnet_name': aws_subnet_name | default(''), 'region': aws_subnet_region | default(''), 'region_id': aws_subnet_region | default(''), 'vpc_id': aws_subnet_vpc_id | default(''), 'cidr': aws_subnet_cidr | default(''), 'cidr_block': aws_subnet_cidr | default('')} }, recursive=True) }}"
+    output_subnet: "{{ output_subnet | default({}) | combine({ aws_subnet_name | default(aws_subnet_id | default(aws_subnet_cidr)): {'deleted': true, 'provider': 'aws', 'id': aws_subnet_id | default(''), 'subnet_id': aws_subnet_id | default(''), 'provider_resource_id': aws_subnet_id | default(''), 'name': aws_subnet_name | default(''), 'subnet_name': aws_subnet_name | default(''), 'region': aws_subnet_region | default(''), 'region_id': aws_subnet_region | default(''), 'vpc_id': aws_subnet_vpc_id | default(''), 'cidr': aws_subnet_cidr | default(''), 'cidr_block': aws_subnet_cidr | default('')} }, recursive=True) }}"
+  when: with_output is defined and with_output

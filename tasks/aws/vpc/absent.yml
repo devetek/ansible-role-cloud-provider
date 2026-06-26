@@ -1,0 +1,65 @@
+---
+- name: Resolve AWS VPC delete request
+  ansible.builtin.set_fact:
+    aws_vpc: "{{ aws_vpc_request if (aws_vpc_request is defined and aws_vpc_request | length > 0) else (cloud_provider_resource_detail.vpc | default({})) }}"
+  no_log: true
+
+- name: Validate AWS VPC delete input
+  ansible.builtin.assert:
+    that:
+      - (cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) | length > 0) or ((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) | length > 0) and (cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) | length > 0))
+      - (aws_vpc.vpc_id | default(aws_vpc.id | default(aws_vpc.provider_resource_id | default(''))) | string | length > 0) or ((aws_vpc.name | default(aws_vpc.vpc_name | default('')) | length > 0) and (aws_vpc.region | default(aws_vpc.region_id | default(cloud_provider_auth.region | default(''))) | length > 0))
+    fail_msg: "AWS VPC deletion requires auth.profile or auth.access_key/auth.secret_key, plus vpc.vpc_id/id, or vpc.name with vpc.region."
+
+- name: Set AWS VPC delete variables
+  ansible.builtin.set_fact:
+    aws_vpc_name: "{{ aws_vpc.name | default(aws_vpc.vpc_name | default('')) }}"
+    aws_vpc_region: "{{ aws_vpc.region | default(aws_vpc.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    aws_vpc_id: "{{ aws_vpc.vpc_id | default(aws_vpc.id | default(aws_vpc.provider_resource_id | default(''))) }}"
+    aws_vpc_profile: "{{ cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) }}"
+    aws_vpc_access_key: "{{ cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) }}"
+    aws_vpc_secret_key: "{{ cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) }}"
+    aws_vpc_session_token: "{{ cloud_provider_auth.session_token | default(cloud_provider_auth.aws_session_token | default('')) }}"
+  no_log: true
+
+- name: Resolve AWS VPC ID from name
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ aws_vpc_region }}"
+    profile: "{{ aws_vpc_profile if aws_vpc_profile | length > 0 else omit }}"
+    access_key: "{{ aws_vpc_access_key if aws_vpc_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_vpc_secret_key if aws_vpc_profile | length == 0 else omit }}"
+    session_token: "{{ aws_vpc_session_token if aws_vpc_session_token | length > 0 else omit }}"
+    filters:
+      tag:Name: "{{ aws_vpc_name }}"
+  register: aws_vpc_lookup
+  changed_when: false
+  when:
+    - aws_vpc_id | string | length == 0
+    - aws_vpc_name | string | length > 0
+  no_log: true
+
+- name: Set AWS VPC ID from lookup
+  ansible.builtin.set_fact:
+    aws_vpc_id: "{{ aws_vpc_lookup.vpcs | default([]) | map(attribute='id') | list | first | default('') }}"
+  when:
+    - aws_vpc_id | string | length == 0
+    - aws_vpc_lookup is defined
+
+- name: Delete AWS VPC
+  amazon.aws.ec2_vpc_net:
+    region: "{{ aws_vpc_region }}"
+    profile: "{{ aws_vpc_profile if aws_vpc_profile | length > 0 else omit }}"
+    access_key: "{{ aws_vpc_access_key if aws_vpc_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_vpc_secret_key if aws_vpc_profile | length == 0 else omit }}"
+    session_token: "{{ aws_vpc_session_token if aws_vpc_session_token | length > 0 else omit }}"
+    state: absent
+    vpc_id: "{{ aws_vpc_id }}"
+  register: aws_vpc_delete
+  when: aws_vpc_id | string | length > 0
+  no_log: true
+
+- name: Set AWS VPC deletion output
+  ansible.builtin.set_fact:
+    output_aws_vpc: "{{ output_aws_vpc | default({}) | combine({ aws_vpc_name | default(aws_vpc_id | string): {'deleted': true, 'provider': 'aws', 'id': aws_vpc_id | default(''), 'vpc_id': aws_vpc_id | default(''), 'provider_resource_id': aws_vpc_id | default(''), 'name': aws_vpc_name | default(''), 'vpc_name': aws_vpc_name | default(''), 'region': aws_vpc_region | default(''), 'region_id': aws_vpc_region | default('')} }, recursive=True) }}"
+    output_vpc: "{{ output_vpc | default({}) | combine({ aws_vpc_name | default(aws_vpc_id | string): {'deleted': true, 'provider': 'aws', 'id': aws_vpc_id | default(''), 'vpc_id': aws_vpc_id | default(''), 'provider_resource_id': aws_vpc_id | default(''), 'name': aws_vpc_name | default(''), 'vpc_name': aws_vpc_name | default(''), 'region': aws_vpc_region | default(''), 'region_id': aws_vpc_region | default('')} }, recursive=True) }}"
+  when: with_output is defined and with_output

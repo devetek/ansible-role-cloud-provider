@@ -1,0 +1,91 @@
+---
+- name: Resolve AWS VPC create request
+  ansible.builtin.set_fact:
+    aws_vpc: "{{ aws_vpc_request if (aws_vpc_request is defined and aws_vpc_request | length > 0) else (cloud_provider_resource_detail.vpc | default({})) }}"
+  no_log: true
+
+- name: Validate AWS VPC create input
+  ansible.builtin.assert:
+    that:
+      - (cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) | length > 0) or ((cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) | length > 0) and (cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) | length > 0))
+      - aws_vpc | length > 0
+      - (aws_vpc.name | default(aws_vpc.vpc_name | default(''))) | length > 0
+      - (aws_vpc.region | default(aws_vpc.region_id | default(cloud_provider_auth.region | default('')))) | length > 0
+      - (aws_vpc.cidr_block | default(aws_vpc.cidr | default(''))) | length > 0
+    fail_msg: "AWS VPC creation requires auth.profile or auth.access_key/auth.secret_key, plus vpc.name, vpc.region, and vpc.cidr_block."
+
+- name: Set AWS VPC variables
+  ansible.builtin.set_fact:
+    aws_vpc_name: "{{ aws_vpc.name | default(aws_vpc.vpc_name | default('')) }}"
+    aws_vpc_region: "{{ aws_vpc.region | default(aws_vpc.region_id | default(cloud_provider_auth.region | default(''))) }}"
+    aws_vpc_cidr_block: "{{ aws_vpc.cidr_block | default(aws_vpc.cidr | default('')) }}"
+    aws_vpc_profile: "{{ cloud_provider_auth.profile | default(cloud_provider_auth.aws_profile | default('')) }}"
+    aws_vpc_access_key: "{{ cloud_provider_auth.access_key | default(cloud_provider_auth.aws_access_key | default('')) }}"
+    aws_vpc_secret_key: "{{ cloud_provider_auth.secret_key | default(cloud_provider_auth.aws_secret_key | default('')) }}"
+    aws_vpc_session_token: "{{ cloud_provider_auth.session_token | default(cloud_provider_auth.aws_session_token | default('')) }}"
+  no_log: true
+
+- name: Create or update AWS VPC
+  amazon.aws.ec2_vpc_net:
+    region: "{{ aws_vpc_region }}"
+    profile: "{{ aws_vpc_profile if aws_vpc_profile | length > 0 else omit }}"
+    access_key: "{{ aws_vpc_access_key if aws_vpc_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_vpc_secret_key if aws_vpc_profile | length == 0 else omit }}"
+    session_token: "{{ aws_vpc_session_token if aws_vpc_session_token | length > 0 else omit }}"
+    state: present
+    name: "{{ aws_vpc_name }}"
+    cidr_block:
+      - "{{ aws_vpc_cidr_block }}"
+    tenancy: "{{ aws_vpc.tenancy | default(omit) }}"
+    dns_support: "{{ aws_vpc.dns_support | default(omit) }}"
+    dns_hostnames: "{{ aws_vpc.dns_hostnames | default(omit) }}"
+    ipv6_cidr: "{{ aws_vpc.ipv6_cidr | default(omit) }}"
+    purge_cidrs: "{{ aws_vpc.purge_cidrs | default(omit) }}"
+    purge_tags: "{{ aws_vpc.purge_tags | default(omit) }}"
+    tags: "{{ {'Name': aws_vpc_name} | combine(aws_vpc.tags | default({})) }}"
+  register: aws_vpc_apply
+  no_log: true
+
+- name: Refresh AWS VPC details
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ aws_vpc_region }}"
+    profile: "{{ aws_vpc_profile if aws_vpc_profile | length > 0 else omit }}"
+    access_key: "{{ aws_vpc_access_key if aws_vpc_profile | length == 0 else omit }}"
+    secret_key: "{{ aws_vpc_secret_key if aws_vpc_profile | length == 0 else omit }}"
+    session_token: "{{ aws_vpc_session_token if aws_vpc_session_token | length > 0 else omit }}"
+    filters:
+      tag:Name: "{{ aws_vpc_name }}"
+  register: aws_vpc_info
+  changed_when: false
+  no_log: true
+
+- name: Resolve AWS VPC output payload
+  ansible.builtin.set_fact:
+    aws_vpc_result_raw: "{{ (aws_vpc_info.vpcs | default([]) | first | default(aws_vpc_apply.vpc | default({}))) }}"
+
+- name: Build normalized AWS VPC output
+  ansible.builtin.set_fact:
+    aws_vpc_result: >-
+      {{
+        aws_vpc_result_raw
+        | combine(
+            {
+              'provider': 'aws',
+              'id': aws_vpc_result_raw.id | default(''),
+              'vpc_id': aws_vpc_result_raw.id | default(''),
+              'provider_resource_id': aws_vpc_result_raw.id | default(''),
+              'name': aws_vpc_result_raw.name | default(aws_vpc_name),
+              'vpc_name': aws_vpc_result_raw.name | default(aws_vpc_name),
+              'region': aws_vpc_region,
+              'region_id': aws_vpc_region,
+              'cidr_block': aws_vpc_result_raw.cidr_block | default(aws_vpc_cidr_block)
+            },
+            recursive=True
+          )
+      }}
+
+- name: Set AWS VPC output
+  ansible.builtin.set_fact:
+    output_aws_vpc: "{{ output_aws_vpc | default({}) | combine({ aws_vpc_name: aws_vpc_result }, recursive=True) }}"
+    output_vpc: "{{ output_vpc | default({}) | combine({ aws_vpc_name: aws_vpc_result }, recursive=True) }}"
+  when: with_output is defined and with_output
